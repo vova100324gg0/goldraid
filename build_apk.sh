@@ -20,12 +20,13 @@ if ! command -v buildozer >/dev/null; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
-if ! dpkg -s zlib1g-dev >/dev/null 2>&1; then
+if ! dpkg -s openjdk-17-jdk >/dev/null 2>&1 || ! dpkg -s zlib1g-dev >/dev/null 2>&1; then
   echo "-- Ставлю зависимости сборки Android (потребуется пароль sudo) --"
   sudo apt-get update
   sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip \
-    autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev \
-    libtinfo5 cmake libffi-dev libssl-dev
+    autoconf automake libtool libltdl-dev pkg-config \
+    zlib1g-dev libncurses-dev libncursesw5-dev libtinfo6 \
+    cmake libffi-dev libssl-dev
 fi
 
 # 3. Чистим прошлые артефакты, чтобы не получить старый APK.

@@ -9,30 +9,60 @@ on:
 jobs:
   apk:
     name: Build debug APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
 
     steps:
       - name: Получить исходники
         uses: actions/checkout@v4
 
-      - name: Собрать APK через Buildozer
-        id: buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
+      - name: Python 3.12
+        uses: actions/setup-python@v5
         with:
-          command: buildozer android debug
-          buildozer_version: stable
+          python-version: "3.12"
 
-      - name: Показать результат
+      - name: Системные зависимости
         run: |
-          echo "APK: ${{ steps.buildozer.outputs.filename }}"
-          ls -lh "${{ steps.buildozer.outputs.filename }}"
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk \
+            autoconf automake libtool libltdl-dev pkg-config \
+            zlib1g-dev libncurses-dev libncursesw5-dev libtinfo6 \
+            cmake libffi-dev libssl-dev
+
+      - name: Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install buildozer cython
+
+      - name: Кэш Android SDK/NDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer/android/platform
+          key: android-platform-api33-ndk25b-v1
+
+      - name: Кэш pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: pip-${{ runner.os }}-
+
+      - name: Собрать APK
+        run: buildozer -v android debug
+
+      - name: Найти APK
+        id: apk
+        run: |
+          file=$(ls bin/*.apk | head -n 1)
+          echo "filename=$file" >> "$GITHUB_OUTPUT"
+          ls -lh "$file"
 
       - name: Загрузить APK как артефакт
         uses: actions/upload-artifact@v4
         with:
           name: goldraid-apk
-          path: ${{ steps.buildozer.outputs.filename }}
+          path: ${{ steps.apk.outputs.filename }}
           if-no-files-found: error
           retention-days: 30
 
@@ -40,5 +70,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.buildozer.outputs.filename }}
+          files: ${{ steps.apk.outputs.filename }}
           generate_release_notes: true
