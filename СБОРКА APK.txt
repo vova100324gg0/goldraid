@@ -1,6 +1,17 @@
 ЗОЛОТОЙ РЕЙД — сборка APK
 ==========================
 
+ГОТОВЫЙ APK УЖЕ СОБРАН
+----------------------
+Файл: goldraid-1.0.0-arm64-v8a_armeabi-v7a-debug.apk (~47 МБ)
+Он лежит в двух местах:
+  - apk\  (в корне проекта)
+  - Сборка\Золотой рейд\apk\  (в комплекте для игрока)
+
+Сборка выполнена в облаке GitHub Actions (репозиторий vova100324gg0/goldraid,
+workflow «Сборка APK»). Ниже описано, как собрать APK самому, если понадобится
+пересборка.
+
 В проекте уже всё подготовлено: buildozer.spec, иконка icon.png,
 заставка presplash.png, скрипты build_apk.sh / build_apk.ps1
 и workflow для GitHub Actions. Быстрый запуск проверки — «СОБРАТЬ APK.cmd».
@@ -29,12 +40,10 @@ Linux-окружения нет, поэтому локально собрать 
    кнопка «Run workflow» -> Run.
 4. Дождитесь зелёной галочки (~20-40 минут, первый раз дольше).
 5. Откройте завершённый запуск, внизу раздел Artifacts ->
-   скачайте goldraid-apk.zip. Внутри — goldraid-1.0.0-...-debug.apk.
+   скачайте goldraid-apk.zip. Внутри —
+   goldraid-1.0.0-arm64-v8a_armeabi-v7a-debug.apk.
 
-Если хотите APK в разделе Releases: создайте тег v1.0.0 и отправьте его:
-       git tag v1.0.0
-       git push origin v1.0.0
-Workflow сам приложит APK к релизу.
+Готовый APK также выложен в разделе Releases (тег v1.0.0).
 
 
 СПОСОБ 2. WSL2 на этом ПК
@@ -66,9 +75,9 @@ Workflow сам приложит APK к релизу.
 - Телефон: скопируйте APK, откройте файл, разрешите установку
   из неизвестных источников.
 - Телевизор Philips (192.168.1.100): подключите ADB и выполните
-       tv-adb.cmd install apk\goldraid-1.0.0-...-debug.apk
+       tv-adb.cmd install apk\goldraid-1.0.0-arm64-v8a_armeabi-v7a-debug.apk
   Или: adb connect 192.168.1.100:5555
-       adb install -r apk\goldraid-1.0.0-...-debug.apk
+       adb install -r apk\goldraid-1.0.0-arm64-v8a_armeabi-v7a-debug.apk
 
 APK собран в режиме debug — для установки на свои устройства этого
 достаточно. Для Google Play нужен release-ключ и сборка
