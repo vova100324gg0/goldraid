@@ -3,10 +3,16 @@ rem ------------------------------------------------------------------
 rem  Philips 40PUT6400/60 (QM152E, Android 5.1.1) - ADB helper
 rem  Usage:  tv-adb.cmd connect | status | clean | install <file.apk>
 rem          tv-adb.cmd shell "<command>"
+rem
+rem  Адрес телевизора задаётся одним из способов:
+rem    1) переменная окружения:  set TV=192.168.1.50:5555
+rem    2) файл tv-ip.txt рядом со скриптом (одна строка — адрес)
+rem    3) значение по умолчанию ниже (замените на адрес своего ТВ)
 rem ------------------------------------------------------------------
 setlocal
 set "ADB=%LOCALAPPDATA%\platform-tools\adb.exe"
-set "TV=192.168.1.100:5555"
+if not defined TV if exist "%~dp0tv-ip.txt" for /f "usebackq tokens=* delims=" %%i in ("%~dp0tv-ip.txt") do set "TV=%%i"
+if not defined TV set "TV=192.168.1.100:5555"
 
 if not exist "%ADB%" (
   echo [X] adb not found at %ADB%

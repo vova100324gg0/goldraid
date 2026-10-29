@@ -4,6 +4,15 @@
 казармы и тотемы, собирай золото по карте, отбивай волны врагов и открывай
 новые карты одну за другой.
 
+## Скачать
+Готовый Android APK — в разделе Releases:
+
+- Страница релиза: https://github.com/vova100324gg0/goldraid/releases/latest
+- Прямая ссылка на файл:
+  https://github.com/vova100324gg0/goldraid/releases/latest/download/goldraid-1.0.0-arm64-v8a_armeabi-v7a-debug.apk
+
+Репозиторий открыт: можно смотреть исходники, скачивать APK и собирать свою версию.
+
 ## Возможности
 - Три карты-уровня, которые открываются последовательно:
   - **Зелёная долина** — 12 волн, 3 дороги к воротам, 16 площадок;
@@ -41,7 +50,7 @@
 
 Или вручную:
 ```bash
-cd "C:\path\to\project"
+cd путь\к\папке\проекта
 .venv\Scripts\python.exe main.py
 ```
 
@@ -66,7 +75,8 @@ Buildozer собирает APK только на Linux. В проекте уже
 
 Готовый файл: `goldraid-1.0.0-arm64-v8a_armeabi-v7a-debug.apk`.
 Собранный APK лежит в `apk/` и в `Сборка/Золотой рейд/apk/`, а также
-в разделе Releases на GitHub (тег v1.0.0).
+в разделе Releases на GitHub (тег v1.0.0):
+https://github.com/vova100324gg0/goldraid/releases/latest
 Подробная пошаговая инструкция — в `СБОРКА APK.txt`.
 
 Параметры APK: `org.goldraid.goldraid`, версия 1.0.0, Android 5.0+ (API 21),
