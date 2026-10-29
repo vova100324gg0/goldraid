@@ -1,4 +1,4 @@
-# Сборка APK «Золотой рейд» из Windows.
+﻿# Сборка APK «Золотой рейд» из Windows.
 # Запуск:  powershell -ExecutionPolicy Bypass -File build_apk.ps1
 #
 # Скрипт сам ничего не устанавливает: он проверяет WSL и запускает

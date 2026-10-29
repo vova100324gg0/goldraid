@@ -5,13 +5,16 @@
 новые карты одну за другой.
 
 ## Скачать
-Готовый Android APK — в разделе Releases:
+Готовые сборки лежат в разделе Releases:
 
 - Страница релиза: https://github.com/vova100324gg0/goldraid/releases/latest
-- Прямая ссылка на файл:
+- Android (APK):
   https://github.com/vova100324gg0/goldraid/releases/latest/download/goldraid-1.0.0-arm64-v8a_armeabi-v7a-debug.apk
+- Windows (ZIP, распаковать и запустить `GoldRaid.exe`):
+  https://github.com/vova100324gg0/goldraid/releases/latest/download/goldraid-1.0.0-windows.zip
 
-Репозиторий открыт: можно смотреть исходники, скачивать APK и собирать свою версию.
+Репозиторий открыт: можно смотреть исходники, скачивать сборки и собирать
+свою версию. Код распространяется по лицензии Apache-2.0.
 
 ## Возможности
 - Три карты-уровня, которые открываются последовательно:
@@ -84,6 +87,23 @@ target API 33, архитектуры arm64-v8a и armeabi-v7a, Kivy 2.3.1.
 На Android игра открывается на весь экран, прогресс хранится в приватной
 папке приложения.
 
+## Windows
+Готовая сборка — `goldraid-1.0.0-windows.zip` в разделе Releases. Распакуйте
+архив в любую папку и запустите `GoldRaid.exe`. Устанавливать Python не нужно:
+всё уже внутри.
+
+Сборка из исходников:
+```powershell
+powershell -ExecutionPolicy Bypass -File build_windows.ps1
+```
+Скрипт сам создаст `.venv`, поставит зависимости и PyInstaller, соберёт папку
+`build\windows\dist\GoldRaid` и архив `build\windows\goldraid-1.0.0-windows.zip`.
+
+## Лицензия
+Проект распространяется по лицензии **Apache-2.0** — см. файл `LICENSE`.
+Можно свободно использовать, изменять и распространять код, в том числе в
+коммерческих целях, с сохранением уведомления об авторстве и лицензии.
+
 ## Управление
 - ПК: WASD / стрелки — движение героя, Esc — пауза или закрытие панелей.
 - Мобильный: палец по полю — виртуальный джойстик.
@@ -108,5 +128,8 @@ target API 33, архитектуры arm64-v8a и armeabi-v7a, Kivy 2.3.1.
 - `game/screens.py` — меню карт, игровой экран, пауза, улучшения, магазин, финал.
 - `buildozer.spec`, `icon.png`, `presplash.png` — настройки, иконка и заставка Android.
 - `build_apk.sh`, `build_apk.ps1`, `СОБРАТЬ APK.cmd`, `СБОРКА APK.txt` — сборка APK.
+- `build_windows.ps1` — сборка Windows-версии (PyInstaller).
+- `windows/pyi_rth_fix_site.py` — runtime-хук для Windows-сборки.
 - `.github/workflows/build-apk.yml` — облачная сборка APK на GitHub.
+- `LICENSE` — лицензия Apache-2.0.
 - `Сборка/Золотой рейд` — готовая папка для запуска.
