@@ -1,0 +1,20 @@
+# Виртуальное окружение и кэши Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Сборка Android
+.buildozer/
+bin/
+build/
+apk/*.apk
+
+# Готовый комплект для игроков (собирается отдельно)
+Сборка/
+
+# Редакторы и ОС
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
