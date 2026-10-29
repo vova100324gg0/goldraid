@@ -40,6 +40,11 @@ android.release_artifact = apk
 # SDL2 — стандартный бэкенд Kivy.
 p4a.bootstrap = sdl2
 
+# Фикс p4a: очистка build-venv и отказ от self-upgrade pip
+# (иначе сборка падает с ImportError: BuildDependencyInstallError).
+p4a.branch = develop
+p4a.commit = 0382d27de2f7315ed98e74884bafb30365decdee
+
 [buildozer]
 log_level = 2
 warn_on_root = 1
