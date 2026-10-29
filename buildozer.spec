@@ -28,10 +28,12 @@ fullscreen = 0
 icon.filename = %(source.dir)s/icon.png
 presplash.filename = %(source.dir)s/presplash.png
 
-# Android: API 33, минимальная версия 21 (Android 5.0), NDK 25b.
+# Android: API 33, минимальная версия 21 (Android 5.0).
+# NDK 28c — рекомендованная p4a/Buildozer версия; в ней каталог clang
+# лежит в lib/clang (а не lib64/clang), как ожидает рецепт libthorvg.
 android.api = 33
 android.minapi = 21
-android.ndk = 25b
+android.ndk = 28c
 android.archs = arm64-v8a,armeabi-v7a
 android.accept_sdk_license = True
 android.allow_backup = True

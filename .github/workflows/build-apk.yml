@@ -39,7 +39,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer/android/platform
-          key: android-platform-api33-ndk25b-v1
+          key: android-platform-api33-ndk28c-v2
 
       - name: Кэш pip
         uses: actions/cache@v4
