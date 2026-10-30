@@ -14,6 +14,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
 from .arena import Arena
@@ -75,9 +76,9 @@ class Backdrop(FloatLayout):
                 self._band_colors.append(band_color)
                 self._band_rects.append(band_rect)
 
-            self._glow_color = Color(1.0, 0.78, 0.28, 0.11)
+            self._glow_color = Color(1.0, 0.82, 0.42, 0.07)
             self._glow = Ellipse()
-            self._glow_b_color = Color(0.30, 0.90, 0.58, 0.05)
+            self._glow_b_color = Color(0.30, 0.90, 0.58, 0.04)
             self._glow_b = Ellipse()
 
             self._arc_color = Color(1.0, 0.86, 0.44, 0.10)
@@ -120,10 +121,10 @@ class Backdrop(FloatLayout):
             rect.size = (width, band_height + dp(1))
 
         self._glow.pos = (
-            self.x + width * 0.5 - width * 0.62,
-            self.y + height * 0.46,
+            self.x + width * 0.5 - width * 0.55,
+            self.y + height * 0.58,
         )
-        self._glow.size = (width * 1.24, height * 0.58)
+        self._glow.size = (width * 1.10, height * 0.44)
         self._glow_b.pos = (
             self.x - width * 0.20,
             self.y + height * 0.02,
@@ -182,8 +183,8 @@ class Backdrop(FloatLayout):
         if not self.running:
             return
         self._t += dt
-        self._glow_color.a = 0.10 + 0.028 * math.sin(self._t * 0.9)
-        self._glow_b_color.a = 0.045 + 0.015 * math.sin(self._t * 0.6 + 1.2)
+        self._glow_color.a = 0.062 + 0.018 * math.sin(self._t * 0.9)
+        self._glow_b_color.a = 0.035 + 0.012 * math.sin(self._t * 0.6 + 1.2)
         self._update_sparks()
 
 
@@ -198,6 +199,7 @@ class CoinEmblem(Widget):
         self.canvas.add(self._group)
         self.bind(pos=self._redraw, size=self._redraw)
         self._redraw()
+        Clock.schedule_once(lambda _dt: self._redraw(), 0)
 
     def _redraw(self, *_args) -> None:
         group = self._group
@@ -206,11 +208,18 @@ class CoinEmblem(Widget):
         radius = min(self.width, self.height) * 0.5
         if radius <= 1:
             return
-        group.add(Color(1.0, 0.80, 0.30, 0.10))
+        group.add(Color(1.0, 0.80, 0.30, 0.17))
         group.add(
             Ellipse(
-                pos=(cx - radius * 1.14, cy - radius * 1.14),
-                size=(radius * 2.28, radius * 2.28),
+                pos=(cx - radius * 1.30, cy - radius * 1.30),
+                size=(radius * 2.60, radius * 2.60),
+            )
+        )
+        group.add(Color(1.0, 0.86, 0.44, 0.12))
+        group.add(
+            Ellipse(
+                pos=(cx - radius * 1.16, cy - radius * 1.16),
+                size=(radius * 2.32, radius * 2.32),
             )
         )
         circle(group, cx, cy, radius * 0.92, (0.60, 0.38, 0.05, 1))
@@ -696,12 +705,22 @@ class MenuScreen(Screen):
         self.backdrop = Backdrop()
         self.add_widget(self.backdrop)
 
+        self.scroll = ScrollView(
+            size_hint=(1, 1),
+            do_scroll_x=False,
+            bar_width=0,
+            scroll_type=["bars", "content"],
+        )
+        self.add_widget(self.scroll)
+
+        self._base_height = dp(794)
         self.column = BoxLayout(
             orientation="vertical",
-            size_hint=(0.94, None),
-            height=dp(794),
-            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            size_hint=(1, None),
+            height=self._base_height,
+            padding=(dp(13), 0, dp(13), 0),
         )
+        self.scroll.add_widget(self.column)
 
         # ---------------------------------------------------------- бренд
         brand = FloatLayout(size_hint_y=None, height=dp(164))
@@ -875,7 +894,8 @@ class MenuScreen(Screen):
         footer.add_widget(right)
 
         self.column.add_widget(footer)
-        self.add_widget(self.column)
+        self.scroll.bind(size=self._fit_column)
+        Clock.schedule_once(self._fit_column, 0)
 
         self.quit = GameButton(
             text="ВЫХОД",
@@ -896,6 +916,21 @@ class MenuScreen(Screen):
     @staticmethod
     def _spacer(height: float) -> Widget:
         return Widget(size_hint_y=None, height=height)
+
+    def _fit_column(self, *_args) -> None:
+        """Растягивает колонку на всю высоту и делит лишнее место на отступы."""
+        viewport = max(dp(1), self.scroll.height)
+        base = self._base_height
+        if viewport <= base + dp(1):
+            self.column.height = base
+            self.column.padding = (dp(13), 0, dp(13), 0)
+            return
+        extra = viewport - base
+        top = int(extra * 0.45)
+        bottom = int(extra) - top
+        self.column.height = viewport
+        self.column.padding = (dp(13), top, dp(13), bottom)
+        Clock.schedule_once(lambda _dt: self.emblem._redraw(), 0)
 
     def on_enter(self) -> None:
         self.backdrop.running = True
@@ -1243,6 +1278,17 @@ class BuildingOverlay(Overlay):
         self.upgrade_button.bind(on_release=lambda *_a: self._upgrade())
         box.add_widget(self.upgrade_button)
 
+        self.sell_button = GameButton(
+            "ПРОДАТЬ",
+            color=(0.38, 0.20, 0.14, 1),
+            text_color=(1.0, 0.88, 0.80, 1),
+            height=dp(42),
+            radius=12,
+            font_size=sp(12),
+        )
+        self.sell_button.bind(on_release=lambda *_a: self._sell())
+        box.add_widget(self.sell_button)
+
         self.close_button = GameButton(
             "ЗАКРЫТЬ",
             color=(0.22, 0.24, 0.28, 1),
@@ -1278,6 +1324,16 @@ class BuildingOverlay(Overlay):
             self.next_label.text = info["next"]
             self.upgrade_button.text = f"УЛУЧШИТЬ · {info['cost']} з."
             self.upgrade_button.disabled = self.arena.gold < info["cost"]
+        refund = self.arena.building_refund(self.building)
+        self.sell_button.text = f"ПРОДАТЬ · +{refund} з."
+        self.sell_button.disabled = self.arena.ended
+
+    def _sell(self) -> None:
+        if self.arena is None or self.building is None:
+            return
+        ok, message = self.arena.sell_building(self.building)
+        self.arena.on_toast(message, "gold" if ok else "bad")
+        self.close()
 
     def _upgrade(self) -> None:
         if self.arena is None or self.building is None:
@@ -1411,7 +1467,11 @@ class GameScreen(Screen):
         self.arena = Arena(self._on_toast, self._on_end, self._on_building)
         self.add_widget(self.arena)
 
-        self.hud = HUD(on_pause=self._toggle_pause, on_shop=self._open_shop)
+        self.hud = HUD(
+            on_pause=self._toggle_pause,
+            on_shop=self._open_shop,
+            on_speed=self._toggle_speed,
+        )
         self.add_widget(self.hud)
 
         self.build_bar = BuildBar(
@@ -1419,6 +1479,9 @@ class GameScreen(Screen):
             on_upgrades=self._open_upgrades,
         )
         self.add_widget(self.build_bar)
+
+        self.wave_prompt = WavePrompt(on_call=self._call_wave)
+        self.add_widget(self.wave_prompt)
 
         self.toast = Toast()
         self.add_widget(self.toast)
@@ -1509,6 +1572,17 @@ class GameScreen(Screen):
         stats = self.arena.stats()
         self.hud.update_stats(stats)
         self.build_bar.set_state(stats, self.arena.build_mode)
+        overlays = (
+            self.pause.visible
+            or self.upgrades.visible
+            or self.shop.visible
+            or self.building_panel.visible
+            or self.end.visible
+        )
+        can_call = stats.get("wave_state") == "prep" and not overlays
+        self.wave_prompt.visible = can_call and not self.arena.ended
+        if can_call:
+            self.wave_prompt.set_state(stats)
         if self.upgrades.visible:
             self.upgrades.refresh()
         if self.shop.visible:
@@ -1522,21 +1596,59 @@ class GameScreen(Screen):
     def _on_key_down(self, _window, key, *_args):
         if self.manager is None or self.manager.current != "game":
             return False
-        if key != 27:
+        if key == 27:
+            if self.end.visible:
+                return True
+            if self.building_panel.visible:
+                self.building_panel.close()
+                return True
+            if self.shop.visible:
+                self._close_shop()
+                return True
+            if self.upgrades.visible:
+                self._close_upgrades()
+                return True
+            self._toggle_pause(None)
+            return True
+        if self.end.visible or self.arena.ended:
             return False
-        if self.end.visible:
+        if 49 <= key <= 52:
+            kinds = list(BUILD_TYPES)
+            index = key - 49
+            if index < len(kinds):
+                self._select_build(kinds[index])
+                return True
+        if key == ord("u"):
+            self._open_upgrades()
             return True
-        if self.building_panel.visible:
-            self.building_panel.close()
+        if key == ord("m"):
+            self._open_shop()
             return True
-        if self.shop.visible:
-            self._close_shop()
+        if key == ord("t"):
+            self._toggle_speed()
             return True
-        if self.upgrades.visible:
-            self._close_upgrades()
+        if key == ord("f"):
+            self._call_wave()
             return True
-        self._toggle_pause(None)
-        return True
+        if key == 32:
+            self._toggle_pause(None)
+            return True
+        return False
+
+    def _toggle_speed(self, *_args) -> None:
+        if self.arena.ended or self.end.visible:
+            return
+        self.arena.toggle_speed()
+        self._sync_hud()
+
+    def _call_wave(self, *_args) -> None:
+        if self.arena.ended or self.end.visible:
+            return
+        ok, message = self.arena.call_wave_now()
+        if not ok:
+            return
+        self.toast.show(message, "gold", 2.2)
+        self._sync_hud()
 
     # ------------------------------------------------------------------
     def _select_build(self, kind: str) -> None:
@@ -1604,6 +1716,7 @@ class GameScreen(Screen):
         self.shop.visible = False
         self.building_panel.visible = False
         self.end.visible = False
+        self.wave_prompt.visible = False
 
     def _restart(self, *_args) -> None:
         self._close_all()
