@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from kivy.graphics import (
     Color,
     Ellipse,
@@ -64,5 +66,42 @@ def rounded_outline(
         Line(
             rounded_rectangle=(x, y, w, h, dp(r)),
             width=dp(width),
+        )
+    )
+
+
+def star_points(
+    cx: float,
+    cy: float,
+    r_outer: float,
+    r_inner: float | None = None,
+    points: int = 5,
+    rotation: float = -math.pi / 2,
+) -> list[tuple[float, float]]:
+    """Вершины звезды по кругу (без Unicode-глифов)."""
+    if r_inner is None:
+        r_inner = r_outer * 0.45
+    result = []
+    step = math.pi / max(1, points)
+    for i in range(points * 2):
+        radius = r_outer if i % 2 == 0 else r_inner
+        angle = rotation + i * step
+        result.append((cx + math.cos(angle) * radius, cy + math.sin(angle) * radius))
+    return result
+
+
+def star(group, cx: float, cy: float, r: float, color, inner: float | None = None) -> None:
+    """Закрашенная звезда: веер треугольников из центра."""
+    pts = star_points(cx, cy, r, inner)
+    vertices = [cx, cy, 0.0, 0.0]
+    for x, y in pts:
+        vertices.extend((x, y, 0.0, 0.0))
+    vertices.extend((pts[0][0], pts[0][1], 0.0, 0.0))
+    group.add(Color(*color))
+    group.add(
+        Mesh(
+            vertices=vertices,
+            indices=list(range(len(pts) + 2)),
+            mode="triangle_fan",
         )
     )

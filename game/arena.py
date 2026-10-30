@@ -15,6 +15,8 @@ from kivy.uix.widget import Widget
 from .background import build_background
 from .config import (
     BUILD_TYPES,
+    CALL_WAVE_BONUS_BASE,
+    CALL_WAVE_BONUS_PER_SECOND,
     ENEMY_TYPES,
     GLOBAL_UPGRADES,
     GOLD_PILE_COUNT,
@@ -27,6 +29,7 @@ from .config import (
     HERO_REGEN,
     HERO_RESPAWN,
     HERO_SPEED,
+    SELL_REFUND,
     SHOP_ITEMS,
     WAVE_REWARD,
     WAVE_REWARD_STEP,
@@ -131,6 +134,7 @@ class Arena(Widget):
         self.pickup_timer = GOLD_PILE_RESPAWN
         self.rage_timer = 0.0
         self.build_mode = None
+        self.time_scale = 1.0
 
         self.wave = 1
         self.wave_state = "prep"
@@ -215,6 +219,8 @@ class Arena(Widget):
             "rage": max(0.0, self.rage_timer),
             "pickups": len(self.pickups),
             "time": self.elapsed,
+            "time_scale": self.time_scale,
+            "call_bonus": self.wave_call_bonus(),
             "preview": self._preview_text(),
             "boss_hp": boss.hp if boss else 0.0,
             "boss_max": boss.max_hp if boss else 0.0,
@@ -414,6 +420,68 @@ class Arena(Widget):
         return self.build_mode
 
     # ------------------------------------------------------------------
+    # Темп боя
+    # ------------------------------------------------------------------
+    def toggle_speed(self) -> float:
+        """Переключает 1x / 2x и возвращает новое значение."""
+        self.time_scale = 2.0 if self.time_scale == 1.0 else 1.0
+        self.on_toast(f"Скорость боя x{int(self.time_scale)}", "info")
+        return self.time_scale
+
+    def wave_call_bonus(self) -> int:
+        """Сколько золота дадут за досрочный вызов волны."""
+        if self.wave_state != "prep":
+            return 0
+        return CALL_WAVE_BONUS_BASE + int(
+            max(0.0, self.wave_timer) * CALL_WAVE_BONUS_PER_SECOND
+        )
+
+    def call_wave_now(self) -> tuple[bool, str]:
+        """Запускает подготовленную волну сразу и платит бонус."""
+        if self.ended:
+            return False, "Бой уже окончен"
+        if self.wave_state != "prep":
+            return False, "Волна уже идёт"
+        bonus = self.wave_call_bonus()
+        self.gold += bonus
+        self.gold_earned += bonus
+        self.wave_timer = 0.0
+        self._start_wave(bonus)
+        return True, f"Волна {self.wave} началась · +{bonus} золота"
+
+    # ------------------------------------------------------------------
+    # Продажа построек
+    # ------------------------------------------------------------------
+    def building_invested(self, building: Building) -> int:
+        """Сколько золота вложено в постройку с учётом улучшений."""
+        data = BUILD_TYPES[building.kind]
+        total = int(data["cost"])
+        for level in range(1, building.level):
+            total += int(data["upgrade_cost"] * level)
+        return total
+
+    def building_refund(self, building: Building) -> int:
+        return int(self.building_invested(building) * SELL_REFUND)
+
+    def sell_building(self, building: Building) -> tuple[bool, str]:
+        if building not in self.buildings:
+            return False, "Постройка уже разрушена"
+        refund = self.building_refund(building)
+        data = BUILD_TYPES[building.kind]
+        self.gold += refund
+        self.buildings.remove(building)
+        if building.kind == "barracks":
+            self.defenders = [
+                defender
+                for defender in self.defenders
+                if defender.home_slot != building.slot
+            ]
+        self._add_ring(building.x, building.y + 20, 30, (1.0, 0.86, 0.32, 1))
+        self._add_particles(building.x, building.y + 26, 8, (1.0, 0.84, 0.34, 1), speed=80)
+        self._draw()
+        return True, f"{data['name']} продана · +{refund} золота"
+
+    # ------------------------------------------------------------------
     # Магазин
     # ------------------------------------------------------------------
     def item_available(self, key: str) -> tuple[bool, str]:
@@ -574,7 +642,7 @@ class Arena(Widget):
     def _tick(self, dt: float) -> None:
         if not self.running or self.paused or self.ended:
             return
-        dt = min(dt, 0.05)
+        dt = min(dt, 0.04) * self.time_scale
         self.elapsed += dt
         self._base_notice_cd = max(0.0, self._base_notice_cd - dt)
         self.rage_timer = max(0.0, self.rage_timer - dt)
@@ -979,7 +1047,7 @@ class Arena(Widget):
             units.append("boss")
         return units
 
-    def _start_wave(self) -> None:
+    def _start_wave(self, bonus: int = 0) -> None:
         self.wave_state = "fight"
         self.pending = list(self.next_units) if self.next_units else self._wave_units(self.wave)
         self.next_units = []
@@ -990,6 +1058,8 @@ class Arena(Widget):
             label = f"ВОЛНА {self.wave} · БОСС И {count - 1} ВРАГОВ"
         elif "chief" in self.pending:
             label = f"ВОЛНА {self.wave} · ВОЖАК И {count - 1} ВРАГОВ"
+        if bonus:
+            label += f" · +{bonus} золота"
         self.on_toast(label, "bad")
 
     def _update_waves(self, dt: float) -> None:

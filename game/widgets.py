@@ -6,9 +6,10 @@ import math
 
 from kivy.animation import Animation
 from kivy.clock import Clock
-from kivy.graphics import Color, Line, Rectangle, RoundedRectangle
+from kivy.graphics import Color, Ellipse, Line, Rectangle, RoundedRectangle
+from kivy.graphics.instructions import InstructionGroup
 from kivy.metrics import dp, sp
-from kivy.properties import BooleanProperty, ListProperty
+from kivy.properties import BooleanProperty, ListProperty, NumericProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
@@ -16,10 +17,11 @@ from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
 from .config import BUILD_TYPES, TOTAL_WAVES
+from .gfx import star
 
 
 class GameButton(Button):
-    """Плоская кнопка со скруглённым фоном и читаемым текстом."""
+    """Кнопка с мягким градиентом, бликом, тенью и золотой подсветкой."""
 
     bg = ListProperty([0.13, 0.45, 0.28, 1])
     text_color = ListProperty([1.0, 1.0, 1.0, 1.0])
@@ -31,6 +33,7 @@ class GameButton(Button):
         text_color=(1.0, 1.0, 1.0, 1),
         radius: float = 16,
         font_size: float | None = None,
+        gloss: bool = True,
         **kwargs,
     ):
         kwargs.setdefault("size_hint_y", None)
@@ -44,6 +47,8 @@ class GameButton(Button):
             background_color=(0, 0, 0, 0),
             color=text_color,
             disabled_color=(text_color[0], text_color[1], text_color[2], 0.55),
+            outline_color=(0, 0, 0, 0.42),
+            outline_width=dp(0.8),
             **kwargs,
         )
         self.bg = list(color)
@@ -51,49 +56,92 @@ class GameButton(Button):
         self._normal_bg = list(color)
         self._base_bg = list(color)
         self._radius = [dp(radius)]
+        self._radius_value = float(radius)
+        self._gloss = bool(gloss)
         self._active = False
         with self.canvas.before:
+            self._shadow_color = Color(0, 0, 0, 0.26)
+            self._shadow = RoundedRectangle(
+                pos=self.pos, size=self.size, radius=self._radius
+            )
             self._bg_color = Color(*self.bg)
             self._rect = RoundedRectangle(
                 pos=self.pos, size=self.size, radius=self._radius
             )
+            self._top_color = Color(1, 1, 1, 0.09)
+            self._top = RoundedRectangle(
+                pos=self.pos, size=self.size, radius=self._radius
+            )
         with self.canvas.after:
             self._edge_color = Color(1.0, 0.86, 0.34, 0.0)
-            self._edge = Line(rounded_rectangle=(0, 0, 0, 0, dp(radius)), width=dp(2))
-        self.bind(pos=self._sync, size=self._sync, state=self._on_state)
+            self._edge = Line(
+                rounded_rectangle=(0, 0, 0, 0, dp(radius)),
+                width=dp(1.4),
+            )
+        self.bind(pos=self._sync, size=self._sync, state=self._refresh_style)
+        self.bind(disabled=self._refresh_style)
+        self._refresh_style()
+
+    def _refresh_style(self, *_args) -> None:
+        if not hasattr(self, "_bg_color"):
+            return
+        base = self._base_bg
+        if self.disabled:
+            fill = (base[0] * 0.52, base[1] * 0.52, base[2] * 0.52, 0.82)
+            edge = (1.0, 1.0, 1.0, 0.03)
+            shadow = (0, 0, 0, 0.10)
+        elif self.state == "down":
+            fill = (base[0] * 0.72, base[1] * 0.72, base[2] * 0.72, base[3])
+            edge = (1.0, 1.0, 1.0, 0.26)
+            shadow = (0, 0, 0, 0.18)
+        else:
+            fill = (base[0], base[1], base[2], base[3])
+            edge = (1.0, 1.0, 1.0, 0.10)
+            shadow = (0, 0, 0, 0.26)
+        if self._active and not self.disabled:
+            edge = (1.0, 0.87, 0.38, 0.92)
+            shadow = (1.0, 0.80, 0.30, 0.16)
+        self._bg_color.rgba = fill
+        self._edge_color.rgba = edge
+        self._shadow_color.rgba = shadow
+        if not self._gloss:
+            self._top_color.a = 0.0
+        elif self.disabled:
+            self._top_color.a = 0.025
+        elif self.state == "down":
+            self._top_color.a = 0.05
+        else:
+            self._top_color.a = 0.09
 
     def _sync(self, *_args) -> None:
+        if not hasattr(self, "_rect"):
+            return
+        self._refresh_style()
+        pad = dp(1.5)
+        radius = dp(self._radius_value)
+        self._shadow.pos = (self.x, self.y - dp(3))
+        self._shadow.size = self.size
         self._rect.pos = self.pos
         self._rect.size = self.size
-        self._bg_color.rgba = self._current_color()
-        pad = dp(1.5)
+        gloss_h = max(0.0, self.height * 0.47)
+        self._top.pos = (self.x + pad, self.y + self.height - gloss_h)
+        self._top.size = (
+            max(0.0, self.width - pad * 2),
+            max(0.0, gloss_h - pad),
+        )
+        self._top.radius = [radius, radius, 0, 0]
         self._edge.rounded_rectangle = (
             self.x + pad,
             self.y + pad,
             max(0, self.width - pad * 2),
             max(0, self.height - pad * 2),
-            dp(14),
+            max(dp(2), radius - pad),
         )
 
-    def _current_color(self):
-        base = self._base_bg
-        if self.disabled:
-            return (base[0] * 0.62, base[1] * 0.62, base[2] * 0.62, 0.72)
-        if self.state == "down":
-            return (base[0] * 0.72, base[1] * 0.72, base[2] * 0.72, base[3])
-        return (base[0], base[1], base[2], base[3])
-
-    def _on_state(self, *_args) -> None:
-        self._bg_color.rgba = self._current_color()
-
-    def on_disabled(self, *_args) -> None:
-        if hasattr(self, "_bg_color"):
-            self._bg_color.rgba = self._current_color()
-
     def set_active(self, active: bool) -> None:
-        self._active = active
+        self._active = bool(active)
         base = self._normal_bg
-        if active:
+        if self._active:
             self._base_bg = [
                 min(1.0, base[0] * 1.55 + 0.10),
                 min(1.0, base[1] * 1.55 + 0.10),
@@ -102,10 +150,41 @@ class GameButton(Button):
             ]
         else:
             self._base_bg = list(base)
-        if hasattr(self, "_edge_color"):
-            self._edge_color.rgba = (1.0, 0.86, 0.34, 0.9 if active else 0.0)
-        if hasattr(self, "_bg_color"):
-            self._bg_color.rgba = self._current_color()
+        self._refresh_style()
+
+
+class StarRow(Widget):
+    """Ряд звёзд, нарисованных примитивами (без Unicode-глифов)."""
+
+    count = NumericProperty(0)
+    total = NumericProperty(3)
+
+    def __init__(self, count: int = 0, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(42), dp(14)))
+        super().__init__(**kwargs)
+        self.count = int(count)
+        self._group = InstructionGroup()
+        self.canvas.add(self._group)
+        self.bind(pos=self._redraw, size=self._redraw, count=self._redraw)
+        self._redraw()
+
+    def _redraw(self, *_args) -> None:
+        self._group.clear()
+        if self.width <= 0 or self.height <= 0 or self.total <= 0:
+            return
+        step = self.width / self.total
+        radius = min(step * 0.42, self.height * 0.5)
+        for index in range(int(self.total)):
+            cx = self.x + step * (index + 0.5)
+            cy = self.center_y
+            filled = index < self.count
+            color = (
+                (1.0, 0.84, 0.30, 1)
+                if filled
+                else (0.24, 0.33, 0.27, 0.85)
+            )
+            star(self._group, cx, cy, radius, color, radius * 0.46)
 
 
 class StatChip(BoxLayout):
@@ -187,10 +266,11 @@ class Meter(Widget):
 class HUD(FloatLayout):
     """Верхняя панель: прочность базы, золото и волна."""
 
-    def __init__(self, on_pause=None, on_shop=None, **kwargs):
+    def __init__(self, on_pause=None, on_shop=None, on_speed=None, **kwargs):
         super().__init__(size_hint=(1, 1), **kwargs)
         self.on_pause = on_pause or (lambda *args: None)
         self.on_shop = on_shop or (lambda *args: None)
+        self.on_speed = on_speed or (lambda *args: None)
 
         self.panel = BoxLayout(
             orientation="vertical",
@@ -223,6 +303,20 @@ class HUD(FloatLayout):
         row.add_widget(self.base_chip)
         row.add_widget(self.gold_chip)
         row.add_widget(self.wave_chip)
+
+        self.speed_button = GameButton(
+            text="x1",
+            color=(0.10, 0.28, 0.34, 1),
+            text_color=(0.84, 0.96, 1.0, 1),
+            size_hint=(None, None),
+            width=dp(40),
+            height=dp(42),
+            font_size=sp(12),
+            radius=11,
+        )
+        self.speed_button.pos_hint = {"center_y": 0.5}
+        self.speed_button.bind(on_release=lambda *_a: self.on_speed())
+        row.add_widget(self.speed_button)
 
         self.shop_button = GameButton(
             text="МАГ.",
@@ -324,6 +418,9 @@ class HUD(FloatLayout):
         self.wave_chip.set_value(
             f"{int(stats.get('wave', 1))}/{int(stats.get('total_waves', TOTAL_WAVES))}"
         )
+        speed = float(stats.get("time_scale", 1.0))
+        self.speed_button.text = f"x{int(speed)}"
+        self.speed_button.set_active(speed > 1.0)
 
         if stats.get("wave_state") == "prep":
             self.status_label.text = (
@@ -337,6 +434,8 @@ class HUD(FloatLayout):
                 f"{int(stats.get('wave', 1))} · врагов: "
                 f"{int(stats.get('enemies', 0))}"
             )
+        if speed > 1.0:
+            self.status_label.text += f" · x{int(speed)}"
 
         if stats.get("boss"):
             boss_max = max(1.0, float(stats.get("boss_max", 1)))
@@ -578,3 +677,55 @@ class Overlay(FloatLayout):
 
     def close(self, *_args) -> None:
         self.visible = False
+
+
+class WavePrompt(FloatLayout):
+    """Кнопка досрочного вызова волны. Появляется только в подготовке."""
+
+    visible = BooleanProperty(False)
+
+    def __init__(self, on_call=None, **kwargs):
+        super().__init__(size_hint=(1, 1), **kwargs)
+        self.on_call = on_call or (lambda *args: None)
+        self.button = GameButton(
+            text="",
+            color=(0.44, 0.30, 0.10, 0.96),
+            text_color=(1.0, 0.94, 0.72, 1),
+            size_hint=(0.76, None),
+            height=dp(50),
+            pos_hint={"center_x": 0.5, "y": 0.135},
+            font_size=sp(10.5),
+            radius=15,
+        )
+        self.button.bind(on_release=lambda *_a: self.on_call())
+        self.add_widget(self.button)
+        self.opacity = 0
+
+    def on_visible(self, _instance, value: bool) -> None:
+        self.opacity = 1.0 if value else 0.0
+
+    def set_state(self, stats: dict) -> None:
+        wave = int(stats.get("wave", 1))
+        total = int(stats.get("total_waves", TOTAL_WAVES))
+        left = int(math.ceil(float(stats.get("wave_timer", 0))))
+        bonus = int(stats.get("call_bonus", 0))
+        if wave >= total:
+            caption = "ПОСЛЕДНЯЯ ВОЛНА"
+        else:
+            caption = f"ВОЛНА {wave} ЧЕРЕЗ {left} С"
+        self.button.text = f"{caption}\nВЫЗВАТЬ РАНЬШЕ · +{bonus} З."
+
+    def on_touch_down(self, touch):
+        if not self.visible:
+            return False
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if not self.visible:
+            return False
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if not self.visible:
+            return False
+        return super().on_touch_up(touch)
