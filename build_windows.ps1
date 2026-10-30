@@ -8,7 +8,10 @@
 # Скрипт сам создаёт виртуальное окружение и ставит зависимости, если их нет.
 
 param(
-    [string]$Version = "1.1.0"
+    [string]$Version = "1.1.0",
+    # Не создавать .venv, а использовать python из PATH
+    # (нужно на CI, где зависимости уже установлены setup-python).
+    [switch]$NoVenv
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,14 +27,23 @@ $ZipPath = Join-Path $OutDir "goldraid-$Version-windows.zip"
 Write-Host "== Золотой рейд: сборка Windows ==" -ForegroundColor Yellow
 
 # --- 1. Виртуальное окружение -------------------------------------------
-$Python = Join-Path $Root ".venv\Scripts\python.exe"
-if (-not (Test-Path $Python)) {
-    Write-Host "Создаю .venv..." -ForegroundColor Gray
-    $base = Get-Command py -ErrorAction SilentlyContinue
-    if ($base) {
-        & py -3 -m venv "$Root\.venv"
-    } else {
-        & python -m venv "$Root\.venv"
+if ($NoVenv) {
+    $cmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+        Write-Host "python не найден в PATH" -ForegroundColor Red
+        exit 1
+    }
+    $Python = $cmd.Source
+} else {
+    $Python = Join-Path $Root ".venv\Scripts\python.exe"
+    if (-not (Test-Path $Python)) {
+        Write-Host "Создаю .venv..." -ForegroundColor Gray
+        $base = Get-Command py -ErrorAction SilentlyContinue
+        if ($base) {
+            & py -3 -m venv "$Root\.venv"
+        } else {
+            & python -m venv "$Root\.venv"
+        }
     }
 }
 
@@ -41,6 +53,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "Восстанавливаю pip..." -ForegroundColor Gray
     & $Python -m ensurepip --upgrade | Out-Null
 }
+Write-Host ("Interpreter: {0}" -f $Python) -ForegroundColor Gray
 
 # --- 2. Зависимости ------------------------------------------------------
 Write-Host "Проверяю зависимости..." -ForegroundColor Gray
