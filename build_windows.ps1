@@ -3,12 +3,12 @@
 #
 # Результат:
 #   build\windows\dist\GoldRaid\GoldRaid.exe  — папка для запуска
-#   build\windows\goldraid-1.1.0-windows.zip  — архив для раздачи
+#   build\windows\goldraid-1.2.0-windows.zip  — архив для раздачи
 #
 # Скрипт сам создаёт виртуальное окружение и ставит зависимости, если их нет.
 
 param(
-    [string]$Version = "1.1.0",
+    [string]$Version = "1.2.0",
     # Не создавать .venv, а использовать python из PATH
     # (нужно на CI, где зависимости уже установлены setup-python).
     [switch]$NoVenv

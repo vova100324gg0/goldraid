@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import random
+import time
 
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -46,6 +47,7 @@ from .entities import (
 )
 from .levels import LEVELS, Level
 from .renderer import draw_arena
+from .sprites import draw_building, draw_castle, draw_slot, draw_spawn_marker
 from .util import clamp, dist, normalize
 
 _KEYMAP = {
@@ -67,9 +69,22 @@ class Arena(Widget):
         self.on_building = on_building or (lambda *args, **kwargs: None)
 
         self.bg_group = InstructionGroup()
+        self.slow_group = InstructionGroup()
         self.fg_group = InstructionGroup()
         self.canvas.add(self.bg_group)
+        self.canvas.add(self.slow_group)
         self.canvas.add(self.fg_group)
+
+        # Слой построек пересобирается редко: он почти не меняется.
+        self.slow_translate = Translate(0, 0)
+        self.fg_translate = Translate(0, 0)
+        self.slow_timer = 0.0
+        self.slow_dirty = True
+
+        # Автоматическое качество: если кадр долгий, упрощаем графику.
+        self.low_detail = False
+        self.frame_ms = 8.0
+        self._quality_frames = 0
 
         self.level: Level = LEVELS[0]
         self.level_index = 0
@@ -134,6 +149,7 @@ class Arena(Widget):
         self.pickup_timer = GOLD_PILE_RESPAWN
         self.rage_timer = 0.0
         self.build_mode = None
+        self._build_focus = None
         self.time_scale = 1.0
 
         self.wave = 1
@@ -154,6 +170,7 @@ class Arena(Widget):
         self.cam_x = 0.0
         self.cam_y = 0.0
         self._snap_camera()
+        self.slow_dirty = True
         self._draw()
 
     def start_new(self) -> None:
@@ -264,6 +281,19 @@ class Arena(Widget):
     def slot_free(self, index: int) -> bool:
         return not any(b.slot == index for b in self.buildings)
 
+    def _nearest_free_slot(self, x: float, y: float, radius: float) -> int | None:
+        """Ближайшая свободная площадка в радиусе (для удобной стройки)."""
+        best = None
+        best_d = radius
+        for index, (sx, sy) in enumerate(self.level.slots):
+            if not self.slot_free(index):
+                continue
+            d = dist(x, y, sx, sy)
+            if d <= best_d:
+                best = index
+                best_d = d
+        return best
+
     def build(self, index: int, kind: str) -> tuple[bool, str]:
         if kind not in BUILD_TYPES:
             return False, "Неизвестная постройка"
@@ -291,6 +321,8 @@ class Arena(Widget):
         )
         self.buildings.append(building)
         self.build_mode = None
+        self._build_focus = None
+        self.slow_dirty = True
         self._add_ring(x, y + 16, 32, (1.0, 0.86, 0.30, 1))
         self._add_particles(x, y + 26, 10, (1.0, 0.86, 0.36, 1), speed=90)
         if kind == "barracks":
@@ -381,6 +413,7 @@ class Arena(Widget):
             self._spawn_defender(building)
         self._add_ring(building.x, building.y + 30, 30, (1.0, 0.86, 0.30, 1))
         self._add_particles(building.x, building.y + 40, 8, (1.0, 0.88, 0.40, 1), speed=70)
+        self.slow_dirty = True
         return True, f"{data['name']} улучшена до ур. {building.level}"
 
     def upgrade_cost(self, key: str) -> int:
@@ -416,6 +449,13 @@ class Arena(Widget):
     def set_build_mode(self, kind: str | None) -> str | None:
         """Включает/выключает режим строительства. Возвращает активный тип."""
         self.build_mode = None if self.build_mode == kind else kind
+        # В режиме стройки камера подсказывает ближайшую свободную площадку.
+        self._build_focus = None
+        if self.build_mode is not None:
+            index = self._nearest_free_slot(self.hero.x, self.hero.y, 1e9)
+            if index is not None:
+                self._build_focus = self.level.slots[index]
+        self.slow_dirty = True
         self._draw()
         return self.build_mode
 
@@ -478,6 +518,7 @@ class Arena(Widget):
             ]
         self._add_ring(building.x, building.y + 20, 30, (1.0, 0.86, 0.32, 1))
         self._add_particles(building.x, building.y + 26, 8, (1.0, 0.84, 0.34, 1), speed=80)
+        self.slow_dirty = True
         self._draw()
         return True, f"{data['name']} продана · +{refund} золота"
 
@@ -549,18 +590,23 @@ class Arena(Widget):
         wx, wy = self._world_at(touch.x, touch.y)
 
         for building in self.buildings:
-            if dist(wx, wy, building.x, building.y) <= 54:
+            if dist(wx, wy, building.x, building.y) <= 58:
                 self.on_building(building, self.building_info(building))
                 return True
 
-        for index, (sx, sy) in enumerate(self.level.slots):
-            if dist(wx, wy, sx, sy) > 50 or not self.slot_free(index):
-                continue
-            if self.build_mode:
+        if self.build_mode:
+            # На телефоне попасть точно в площадку сложно, поэтому берём
+            # ближайшую свободную площадку в щедром радиусе и подсвечиваем.
+            index = self._nearest_free_slot(wx, wy, 92)
+            if index is not None:
                 ok, message = self.build(index, self.build_mode)
                 self.on_toast(message, "gold" if ok else "bad")
-            else:
-                self.on_toast("Выбери постройку на нижней панели", "info")
+                return True
+
+        for index, (sx, sy) in enumerate(self.level.slots):
+            if dist(wx, wy, sx, sy) > 54 or not self.slot_free(index):
+                continue
+            self.on_toast("Выбери постройку на нижней панели", "info")
             return True
 
         self._joy_uid = touch.uid
@@ -642,7 +688,9 @@ class Arena(Widget):
     def _tick(self, dt: float) -> None:
         if not self.running or self.paused or self.ended:
             return
-        dt = min(dt, 0.04) * self.time_scale
+        frame_dt = min(dt, 0.04)
+        dt = frame_dt * self.time_scale
+        self.slow_timer -= frame_dt
         self.elapsed += dt
         self._base_notice_cd = max(0.0, self._base_notice_cd - dt)
         self.rage_timer = max(0.0, self.rage_timer - dt)
@@ -1312,6 +1360,12 @@ class Arena(Widget):
         # Камера идёт за героем и чуть смотрит вперёд, к базе.
         focus_x = self.hero.x
         focus_y = self.hero.y + 70.0
+        if self.build_mode and self._build_focus is not None:
+            # В режиме стройки мягко подтягиваем камеру к свободной площадке,
+            # чтобы её было видно и по ней было удобно попасть пальцем.
+            fx, fy = self._build_focus
+            focus_x = focus_x * 0.4 + fx * 0.6
+            focus_y = focus_y * 0.4 + (fy + 30.0) * 0.6
         return (
             self._clamp_axis(focus_x - view_w / 2, self.world_w, view_w),
             self._clamp_axis(focus_y - view_h / 2, self.world_h, view_h),
@@ -1329,6 +1383,7 @@ class Arena(Widget):
     def _on_size(self, *args) -> None:
         self._snap_camera()
         if hasattr(self, "fg_group"):
+            self.slow_dirty = True
             self._draw()
 
     # ------------------------------------------------------------------
@@ -1352,6 +1407,10 @@ class Arena(Widget):
         self._add_particles(x, y, 7, color, speed=75)
 
     def _add_particles(self, x: float, y: float, count: int, color, speed: float = 80) -> None:
+        if len(self.particles) > 90:
+            return
+        if self.low_detail:
+            count = max(3, count // 2)
         for _ in range(count):
             angle = random.uniform(0, math.pi * 2)
             velocity = random.uniform(speed * 0.35, speed)
@@ -1392,7 +1451,61 @@ class Arena(Widget):
     # ------------------------------------------------------------------
     # Отрисовка
     # ------------------------------------------------------------------
+    def rebuild_slow(self) -> None:
+        """Пересобирает слой построек, площадок и замка."""
+        group = self.slow_group
+        group.clear()
+        group.add(PushMatrix())
+        group.add(Scale(dp(1), dp(1), 1))
+        group.add(self.slow_translate)
+
+        base_x, base_y = self.level.base_pos
+        ratio = self.base_hp / max(1.0, self.base_max_hp)
+        draw_castle(group, self.elapsed, 0, ratio, base_x, base_y)
+
+        for route in self.level.routes:
+            draw_spawn_marker(group, route[0][0], route[0][1], self.elapsed)
+
+        occupied = {building.slot for building in self.buildings}
+        for index, (x, y) in enumerate(self.level.slots):
+            if index in occupied:
+                continue
+            draw_slot(
+                group,
+                x,
+                y,
+                self.elapsed,
+                active=self.build_mode is not None,
+                affordable=(
+                    self.build_mode is None
+                    or self.gold >= self.build_cost(self.build_mode)
+                ),
+            )
+
+        for building in self.buildings:
+            draw_building(group, building, self.elapsed)
+
+        group.add(PopMatrix())
+        self.slow_dirty = False
+        self.slow_timer = 0.08
+
     def _draw(self) -> None:
         if self.width <= 2 or self.height <= 2:
             return
+        start = time.perf_counter()
         draw_arena(self)
+        spent = (time.perf_counter() - start) * 1000.0
+        self.frame_ms += (spent - self.frame_ms) * 0.08
+        self._update_quality()
+
+    def _update_quality(self) -> None:
+        """Включает упрощённую графику, если кадры стабильно тяжёлые."""
+        self._quality_frames += 1
+        if self._quality_frames < 40:
+            return
+        if not self.low_detail and self.frame_ms > 13.0:
+            self.low_detail = True
+            self._quality_frames = 0
+        elif self.low_detail and self.frame_ms < 6.5:
+            self.low_detail = False
+            self._quality_frames = 0

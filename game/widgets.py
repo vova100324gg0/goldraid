@@ -16,8 +16,19 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
-from .config import BUILD_TYPES, TOTAL_WAVES
+from .config import BUILD_TYPES, SAFE_BOTTOM, SAFE_SIDE, SAFE_TOP, TOTAL_WAVES
 from .gfx import star
+
+
+def _set_text(label: Label, text: str) -> None:
+    """Меняет текст только если он реально другой.
+
+    Перестройка текстуры Label — дорогая операция, а HUD обновляется
+    10 раз в секунду: без этой проверки телефон перерисовывал бы
+    полтора десятка текстов даже когда на экране ничего не изменилось.
+    """
+    if label.text != text:
+        label.text = text
 
 
 class GameButton(Button):
@@ -232,8 +243,8 @@ class StatChip(BoxLayout):
         self._rect.size = self.size
 
     def set_value(self, text: str, color=None) -> None:
-        self.value_label.text = text
-        if color is not None:
+        _set_text(self.value_label, text)
+        if color is not None and list(self.value_label.color) != list(color):
             self.value_label.color = color
 
 
@@ -257,10 +268,14 @@ class Meter(Widget):
         self._fg_rect.size = (max(0.0, self.width * self._ratio), self.height)
 
     def set_ratio(self, ratio: float, color=None) -> None:
-        self._ratio = max(0.0, min(1.0, ratio))
-        if color is not None:
+        ratio = max(0.0, min(1.0, ratio))
+        changed = abs(ratio - self._ratio) > 0.002
+        self._ratio = ratio
+        if color is not None and list(self._fg.rgba) != list(color):
             self._fg.rgba = color
-        self._sync()
+            changed = True
+        if changed:
+            self._sync()
 
 
 class HUD(FloatLayout):
@@ -275,9 +290,9 @@ class HUD(FloatLayout):
         self.panel = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(152),
+            height=dp(152) + dp(SAFE_TOP),
             pos_hint={"top": 1},
-            padding=(dp(9), dp(6)),
+            padding=(dp(9) + dp(SAFE_SIDE), dp(6) + dp(SAFE_TOP)),
             spacing=dp(3),
         )
         # Полупрозрачная подложка: текст не теряется на фоне замка.
@@ -309,10 +324,10 @@ class HUD(FloatLayout):
             color=(0.10, 0.28, 0.34, 1),
             text_color=(0.84, 0.96, 1.0, 1),
             size_hint=(None, None),
-            width=dp(40),
-            height=dp(42),
-            font_size=sp(12),
-            radius=11,
+            width=dp(46),
+            height=dp(46),
+            font_size=sp(13),
+            radius=13,
         )
         self.speed_button.pos_hint = {"center_y": 0.5}
         self.speed_button.bind(on_release=lambda *_a: self.on_speed())
@@ -323,10 +338,10 @@ class HUD(FloatLayout):
             color=(0.32, 0.20, 0.46, 1),
             text_color=(1.0, 0.92, 1.0, 1),
             size_hint=(None, None),
-            width=dp(42),
-            height=dp(42),
-            font_size=sp(10.5),
-            radius=11,
+            width=dp(46),
+            height=dp(46),
+            font_size=sp(11),
+            radius=13,
         )
         self.shop_button.pos_hint = {"center_y": 0.5}
         self.shop_button.bind(on_release=lambda *_a: self.on_shop())
@@ -337,10 +352,10 @@ class HUD(FloatLayout):
             color=(0.05, 0.13, 0.10, 0.92),
             text_color=(1, 1, 1, 1),
             size_hint=(None, None),
-            width=dp(42),
-            height=dp(42),
-            font_size=sp(15),
-            radius=11,
+            width=dp(46),
+            height=dp(46),
+            font_size=sp(16),
+            radius=13,
         )
         self.pause_button.pos_hint = {"center_y": 0.5}
         self.pause_button.bind(on_release=lambda *_a: self.on_pause())
@@ -419,30 +434,31 @@ class HUD(FloatLayout):
             f"{int(stats.get('wave', 1))}/{int(stats.get('total_waves', TOTAL_WAVES))}"
         )
         speed = float(stats.get("time_scale", 1.0))
-        self.speed_button.text = f"x{int(speed)}"
+        _set_text(self.speed_button, f"x{int(speed)}")
         self.speed_button.set_active(speed > 1.0)
 
         if stats.get("wave_state") == "prep":
-            self.status_label.text = (
+            status = (
                 f"{stats.get('level_name', '')} · волна {int(stats.get('wave', 1))} через "
                 f"{int(math.ceil(stats.get('wave_timer', 0)))} с · "
                 f"{stats.get('preview', '')}"
             )
         else:
-            self.status_label.text = (
+            status = (
                 f"{stats.get('level_name', '')} · волна "
                 f"{int(stats.get('wave', 1))} · врагов: "
                 f"{int(stats.get('enemies', 0))}"
             )
         if speed > 1.0:
-            self.status_label.text += f" · x{int(speed)}"
+            status += f" · x{int(speed)}"
+        _set_text(self.status_label, status)
 
         if stats.get("boss"):
             boss_max = max(1.0, float(stats.get("boss_max", 1)))
             boss_hp = max(0.0, float(stats.get("boss_hp", 0)))
             self.boss_row.opacity = 1
             self.boss_row.height = dp(20)
-            self.boss_label.text = f"{stats.get('boss_name', 'БОСС')}: {int(boss_hp)}"
+            _set_text(self.boss_label, f"{stats.get('boss_name', 'БОСС')}: {int(boss_hp)}")
             self.boss_meter.set_ratio(boss_hp / boss_max, (1.0, 0.35, 0.28, 1))
         else:
             self.boss_row.opacity = 0
@@ -465,13 +481,14 @@ class HUD(FloatLayout):
                 "восточнее": "→",
             }.get(stats.get("base_dir", ""), "•")
             roam = f" · База {arrow}{int(stats.get('base_distance', 0))}"
-        self.info_label.text = (
+        _set_text(
+            self.info_label,
             f"{hero_text} · Бой {int(stats.get('defenders', 0))} · "
             f"Ш {int(stats.get('mines', 0))} · "
             f"Б {int(stats.get('towers', 0))} · "
             f"К {int(stats.get('barracks', 0))} · "
             f"Т {int(stats.get('totems', 0))}"
-            f"{roam}"
+            f"{roam}",
         )
 
     def update_stats(self, stats: dict) -> None:
@@ -489,9 +506,9 @@ class BuildBar(FloatLayout):
         panel = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(96),
+            height=dp(96) + dp(SAFE_BOTTOM) * 2,
             pos_hint={"x": 0, "y": 0},
-            padding=(dp(6), dp(5)),
+            padding=(dp(6) + dp(SAFE_SIDE), dp(5) + dp(SAFE_BOTTOM)),
             spacing=dp(2),
         )
         with panel.canvas.before:
@@ -558,11 +575,12 @@ class BuildBar(FloatLayout):
             button.set_active(active)
             button.disabled = (not active) and gold < cost
         if mode is None:
-            self.hint.text = "Строй и защищай базу"
+            _set_text(self.hint, "Строй и защищай базу")
         else:
-            self.hint.text = (
+            _set_text(
+                self.hint,
                 f"{BUILD_TYPES[mode]['name']}: выбери свободную площадку · "
-                "нажми кнопку ещё раз, чтобы отменить"
+                "нажми кнопку ещё раз, чтобы отменить",
             )
 
 
@@ -607,7 +625,7 @@ class Toast(FloatLayout):
             "blue": (0.55, 0.82, 1.0, 1),
             "bad": (1.0, 0.44, 0.36, 1),
         }
-        self.label.text = text
+        _set_text(self.label, text)
         self.label.color = colors.get(kind, colors["gold"])
         Animation.cancel_all(self.label, "opacity")
         self.label.opacity = 1
@@ -713,7 +731,7 @@ class WavePrompt(FloatLayout):
             caption = "ПОСЛЕДНЯЯ ВОЛНА"
         else:
             caption = f"ВОЛНА {wave} ЧЕРЕЗ {left} С"
-        self.button.text = f"{caption}\nВЫЗВАТЬ РАНЬШЕ · +{bonus} З."
+        _set_text(self.button, f"{caption}\nВЫЗВАТЬ РАНЬШЕ · +{bonus} З.")
 
     def on_touch_down(self, touch):
         if not self.visible:

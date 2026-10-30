@@ -136,6 +136,94 @@ def _flower(group, x: float, y: float, color) -> None:
     circle(group, x + 4, y + 1, 1.3, (1, 0.92, 0.55, 1))
 
 
+def _ruin(group, x: float, y: float, scale: float) -> None:
+    """Разрушенная колонна — наполняет карту следами старой крепости."""
+    ellipse(group, x + 4 * scale, y, 46 * scale, 14 * scale, (0.06, 0.14, 0.08, 0.24))
+    poly(
+        group,
+        [
+            (x - 16 * scale, y),
+            (x - 19 * scale, y + 20 * scale),
+            (x - 12 * scale, y + 42 * scale),
+            (x + 9 * scale, y + 44 * scale),
+            (x + 18 * scale, y + 18 * scale),
+            (x + 15 * scale, y),
+        ],
+        STONE,
+    )
+    poly(
+        group,
+        [
+            (x - 12 * scale, y + 42 * scale),
+            (x + 9 * scale, y + 44 * scale),
+            (x + 7 * scale, y + 30 * scale),
+            (x - 9 * scale, y + 28 * scale),
+        ],
+        STONE_LIGHT,
+    )
+    poly(
+        group,
+        [
+            (x - 19 * scale, y + 20 * scale),
+            (x - 12 * scale, y + 42 * scale),
+            (x - 5 * scale, y + 8 * scale),
+        ],
+        STONE_DARK,
+    )
+    # Поваленный обломок рядом.
+    rect(group, x + 22 * scale, y + 2 * scale, 26 * scale, 9 * scale, STONE_DARK)
+    ellipse(group, x + 60 * scale, y + 1 * scale, 20 * scale, 8 * scale,
+            (0.20, 0.42, 0.22, 0.5))
+
+
+def _banner(group, x: float, y: float, color) -> None:
+    """Знамя на краю дороги."""
+    rect(group, x - 2, y, 4, 46, WOOD)
+    poly(group, [(x + 2, y + 46), (x + 30, y + 38), (x + 2, y + 28)], color)
+    circle(group, x, y + 47, 3.2, (1.0, 0.86, 0.36, 1))
+
+
+def _gold_vein(group, x: float, y: float, scale: float) -> None:
+    """Золотая жила: украшение рядом с точками сбора золота."""
+    ellipse(group, x, y, 54 * scale, 22 * scale, (1.0, 0.80, 0.20, 0.10))
+    poly(
+        group,
+        [
+            (x - 20 * scale, y),
+            (x - 10 * scale, y + 16 * scale),
+            (x + 6 * scale, y + 19 * scale),
+            (x + 20 * scale, y + 6 * scale),
+            (x + 14 * scale, y),
+        ],
+        STONE_DARK,
+    )
+    for dx, dy, r in ((-8, 8, 3.4), (2, 12, 4.2), (10, 5, 3.0)):
+        circle(group, x + dx * scale, y + dy * scale, r * scale,
+               (1.0, 0.84, 0.28, 0.95))
+        circle(group, x + dx * scale - 1, y + dy * scale + 1.4, r * 0.4,
+               (1.0, 0.97, 0.72, 1))
+
+
+def _plaza(group, x: float, y: float, radius: float) -> None:
+    """Вымощенная площадка у базы — двор выглядит обжитым."""
+    ellipse(group, x, y, radius * 2.2, radius * 1.5, (0.30, 0.34, 0.30, 0.55))
+    ellipse(group, x, y, radius * 1.95, radius * 1.3, (0.52, 0.53, 0.50, 0.55))
+    step = radius * 0.42
+    row = 0
+    yy = y - radius * 0.5
+    while yy <= y + radius * 0.5:
+        xx = x - radius * 0.8 + (step * 0.5 if row % 2 else 0)
+        while xx <= x + radius * 0.8:
+            dx = (xx - x) / (radius * 0.9)
+            dy = (yy - y) / (radius * 0.6)
+            if dx * dx + dy * dy <= 1.0:
+                ellipse(group, xx, yy, step * 0.72, step * 0.5,
+                        (0.66, 0.67, 0.63, 0.32))
+            xx += step
+        yy += step * 0.62
+        row += 1
+
+
 def build_background(group, level) -> None:
     """Добавляет статичные инструкции фона выбранной карты."""
     rnd = random.Random(level.seed)
@@ -182,6 +270,10 @@ def build_background(group, level) -> None:
             ],
         )
 
+    # Мощёный двор у базы: карта перестаёт выглядеть пустой.
+    base_x, base_y = level.base_pos
+    _plaza(group, base_x, base_y - 26, 175.0)
+
     # Дороги врагов: тёмная кромка, полотно и светлая середина.
     for path in paths:
         _band(group, path, 112, PATH_EDGE)
@@ -222,8 +314,34 @@ def build_background(group, level) -> None:
             continue
         _rock(group, x, y, rnd.uniform(0.6, 1.2))
 
+    # Руины старой крепости — наполняют пустующие участки карты.
+    ruins = 0
+    attempts = 0
+    while ruins < 7 and attempts < 400:
+        attempts += 1
+        x = rnd.uniform(90, w - 90)
+        y = rnd.uniform(90, h - 90)
+        if not _clear_of_paths(x, y, 120, samples) or _near_landmark(x, y, 150, landmarks):
+            continue
+        _ruin(group, x, y, rnd.uniform(0.85, 1.35))
+        ruins += 1
+
+    # Знамёна у подступов к воротам.
+    for path in paths:
+        if len(path) < 5:
+            continue
+        px, py = path[-4]
+        _banner(group, px + 62, py - 6, level.accent)
+        qx, qy = path[-3]
+        _banner(group, qx - 62, qy - 6, level.accent)
+
+    # Золотые жилы возле точек сбора золота.
+    for gx, gy in level.gold_spots[::2]:
+        _gold_vein(group, gx + rnd.uniform(-16, 16), gy - 30,
+                   rnd.uniform(0.85, 1.15))
+
     # Кусты и мелкая трава.
-    for _ in range(70):
+    for _ in range(120):
         x = rnd.uniform(30, w - 30)
         y = rnd.uniform(30, h - 30)
         if not _clear_of_paths(x, y, 45, samples):

@@ -142,7 +142,7 @@ def draw_hero(group, hero: Hero, t: float) -> None:
         ring(group, x, y + 24, 29, (1.0, 0.4, 0.3, 0.65), 1.5)
 
 
-def draw_enemy(group, enemy: Enemy, t: float) -> None:
+def draw_enemy(group, enemy: Enemy, t: float, detail: bool = True) -> None:
     x, y = enemy.x, enemy.y
     palettes = {
         "grunt": (RED_DARK, RED, (1, 0.86, 0.42, 1)),
@@ -173,7 +173,8 @@ def draw_enemy(group, enemy: Enemy, t: float) -> None:
 
     if enemy.elite:
         ring(group, x, y + 2, radius * 1.9, (1.0, 0.76, 0.24, 0.55), 2)
-    _shadow(group, x, y - 2, radius * 2.6, radius * 0.9, 0.30)
+    if detail:
+        _shadow(group, x, y - 2, radius * 2.6, radius * 0.9, 0.30)
 
     # Ноги.
     rect(group, x - 5 * scale, y + 1, 5 * scale, 11 * scale, (0.20, 0.08, 0.08, 1))
@@ -204,27 +205,29 @@ def draw_enemy(group, enemy: Enemy, t: float) -> None:
         ],
         body_color,
     )
-    circle(group, x - 3 * scale, y + 38 * scale + bob, 1.7 * scale, eye_color)
-    circle(group, x + 3 * scale, y + 38 * scale + bob, 1.7 * scale, eye_color)
+    if detail:
+        circle(group, x - 3 * scale, y + 38 * scale + bob, 1.7 * scale, eye_color)
+        circle(group, x + 3 * scale, y + 38 * scale + bob, 1.7 * scale, eye_color)
 
     # Оружие.
-    group.add(PushMatrix())
-    group.add(Translate(x + radius * 0.75, y + 22 * scale + bob, 0))
-    group.add(Rotate(angle=math.degrees(enemy.facing), axis=(0, 0, 1)))
-    if enemy.kind == "boss":
-        rect(group, 0, -1.5 * scale, 26 * scale, 3 * scale, STONE_LIGHT)
-        poly(group, [(25 * scale, -6 * scale), (39 * scale, 0), (25 * scale, 6 * scale)], WHITE)
-    elif enemy.kind == "brute":
-        rect(group, 0, -3 * scale, 30 * scale, 6 * scale, WOOD)
-        circle(group, 31 * scale, 0, 6 * scale, STONE_DARK)
-    elif enemy.kind == "archer":
-        rect(group, 0, -1 * scale, 16 * scale, 2 * scale, WOOD_LIGHT)
-    elif enemy.kind == "shaman":
-        rect(group, 0, -1 * scale, 26 * scale, 2.4 * scale, WOOD)
-    else:
-        rect(group, 0, -1.5 * scale, 24 * scale, 3 * scale, STONE_LIGHT)
-        rect(group, -2 * scale, -4 * scale, 4 * scale, 8 * scale, WOOD)
-    group.add(PopMatrix())
+    if detail:
+        group.add(PushMatrix())
+        group.add(Translate(x + radius * 0.75, y + 22 * scale + bob, 0))
+        group.add(Rotate(angle=math.degrees(enemy.facing), axis=(0, 0, 1)))
+        if enemy.kind == "boss":
+            rect(group, 0, -1.5 * scale, 26 * scale, 3 * scale, STONE_LIGHT)
+            poly(group, [(25 * scale, -6 * scale), (39 * scale, 0), (25 * scale, 6 * scale)], WHITE)
+        elif enemy.kind == "brute":
+            rect(group, 0, -3 * scale, 30 * scale, 6 * scale, WOOD)
+            circle(group, 31 * scale, 0, 6 * scale, STONE_DARK)
+        elif enemy.kind == "archer":
+            rect(group, 0, -1 * scale, 16 * scale, 2 * scale, WOOD_LIGHT)
+        elif enemy.kind == "shaman":
+            rect(group, 0, -1 * scale, 26 * scale, 2.4 * scale, WOOD)
+        else:
+            rect(group, 0, -1.5 * scale, 24 * scale, 3 * scale, STONE_LIGHT)
+            rect(group, -2 * scale, -4 * scale, 4 * scale, 8 * scale, WOOD)
+        group.add(PopMatrix())
 
     # Особенности видов.
     if enemy.kind == "boss":

@@ -1,4 +1,16 @@
-"""Отрисовка игрового мира."""
+"""Отрисовка игрового мира.
+
+Кадр собирается из трёх слоёв:
+
+* ``bg_group``   — земля, дороги и декор: строится один раз на карту;
+* ``slow_group`` — площадки, постройки, замок и порталы: пересобирается
+  редко (~12 раз в секунду), потому что эти объекты почти не двигаются;
+* ``fg_group``   — герой, враги, бойцы, золото и эффекты: пересобирается
+  каждый кадр, но только то, что реально видно на экране.
+
+Такое разделение снимает с каждого кадра сотни лишних инструкций Kivy:
+на слабых телефонах именно их создание было главным тормозом.
+"""
 
 from __future__ import annotations
 
@@ -9,8 +21,6 @@ from kivy.metrics import dp
 
 from .gfx import ring
 from .sprites import (
-    draw_building,
-    draw_castle,
     draw_coin,
     draw_defender,
     draw_effect,
@@ -18,61 +28,57 @@ from .sprites import (
     draw_hero,
     draw_joystick,
     draw_particle,
-    draw_slot,
-    draw_spawn_marker,
 )
+
+# Сколько пикселей мира за пределами экрана ещё считаем видимыми.
+CULL_MARGIN = 150.0
 
 
 def draw_arena(arena) -> None:
     shake_x = arena.shake_x
     shake_y = arena.shake_y
+    offset_x = -arena.cam_x + shake_x
+    offset_y = -arena.cam_y + shake_y
 
-    # Статичный фон уже лежит в отдельной группе. Двигаем только его transform.
-    arena.bg_translate.x = -arena.cam_x + shake_x
-    arena.bg_translate.y = -arena.cam_y + shake_y
+    # Фон, «медленный» слой и передний план двигаются вместе с камерой.
+    arena.bg_translate.x = offset_x
+    arena.bg_translate.y = offset_y
+    arena.slow_translate.x = offset_x
+    arena.slow_translate.y = offset_y
+    arena.fg_translate.x = offset_x
+    arena.fg_translate.y = offset_y
+
+    if arena.slow_dirty or arena.slow_timer <= 0.0:
+        arena.rebuild_slow()
+
+    view_w, view_h = arena._view_size()
+    left = arena.cam_x - CULL_MARGIN
+    bottom = arena.cam_y - CULL_MARGIN
+    right = arena.cam_x + view_w + CULL_MARGIN
+    top = arena.cam_y + view_h + CULL_MARGIN
+
+    def visible(x: float, y: float) -> bool:
+        return left <= x <= right and bottom <= y <= top
 
     group = arena.fg_group
     group.clear()
     group.add(PushMatrix())
     group.add(Scale(dp(1), dp(1), 1))
-    group.add(Translate(-arena.cam_x + shake_x, -arena.cam_y + shake_y, 0))
+    group.add(arena.fg_translate)
 
-    base_x, base_y = arena.level.base_pos
-
-    # Портал в начале каждой дороги.
-    for route in arena.level.routes:
-        draw_spawn_marker(group, route[0][0], route[0][1], arena.elapsed)
-
-    ratio = arena.base_hp / max(1.0, arena.base_max_hp)
-    draw_castle(group, arena.elapsed, 0, ratio, base_x, base_y)
+    detail = not arena.low_detail
 
     for coin in arena.pickups:
-        draw_coin(group, coin, arena.elapsed)
-
-    occupied = {building.slot for building in arena.buildings}
-    for index, (x, y) in enumerate(arena.level.slots):
-        if index in occupied:
-            continue
-        draw_slot(
-            group,
-            x,
-            y,
-            arena.elapsed,
-            active=arena.build_mode is not None,
-            affordable=(
-                arena.build_mode is None
-                or arena.gold >= arena.build_cost(arena.build_mode)
-            ),
-        )
-
-    for building in arena.buildings:
-        draw_building(group, building, arena.elapsed)
+        if visible(coin.x, coin.y):
+            draw_coin(group, coin, arena.elapsed)
 
     for defender in arena.defenders:
-        draw_defender(group, defender, arena.elapsed)
+        if visible(defender.x, defender.y):
+            draw_defender(group, defender, arena.elapsed)
 
     for enemy in arena.enemies:
-        draw_enemy(group, enemy, arena.elapsed)
+        if visible(enemy.x, enemy.y):
+            draw_enemy(group, enemy, arena.elapsed, detail=detail)
 
     if arena.hero.hp > 0:
         draw_hero(group, arena.hero, arena.elapsed)
@@ -88,9 +94,11 @@ def draw_arena(arena) -> None:
             )
 
     for effect in arena.effects:
-        draw_effect(group, effect)
+        if visible(effect.x, effect.y):
+            draw_effect(group, effect)
     for particle in arena.particles:
-        draw_particle(group, particle)
+        if visible(particle.x, particle.y):
+            draw_particle(group, particle)
 
     group.add(PopMatrix())
 

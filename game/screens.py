@@ -693,6 +693,118 @@ class LevelTile(GameButton):
         self._refresh_style()
 
 
+class InfoOverlay(Overlay):
+    """Экран «Об игре»: автор, лицензия, управление и связь."""
+
+    dim_alpha = 0.62
+    dismiss_on_outside = True
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        box = MenuCard(
+            orientation="vertical",
+            size_hint=(0.9, None),
+            height=dp(468),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            padding=(dp(18), dp(16)),
+            spacing=dp(7),
+        )
+
+        title = Label(
+            text="ОБ ИГРЕ",
+            font_size=sp(24),
+            bold=True,
+            color=(1.0, 0.84, 0.35, 1),
+            size_hint_y=None,
+            height=dp(36),
+            halign="center",
+            valign="middle",
+        )
+        title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(title)
+
+        version_label = Label(
+            text=f"версия {VERSION} · {GAME_TITLE}",
+            font_size=sp(10.5),
+            bold=True,
+            color=UI_MUTED,
+            size_hint_y=None,
+            height=dp(20),
+            halign="center",
+            valign="middle",
+        )
+        version_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(version_label)
+        box.add_widget(Divider())
+
+        for text, height, color, font in (
+            (
+                "Защищай ворота: собирай золото, строй башни, шахты, казармы "
+                "и тотемы, отбивай волны врагов.",
+                dp(44),
+                (0.86, 0.94, 0.88, 1),
+                sp(10.5),
+            ),
+            (f"Автор: {AUTHOR}", dp(20), (0.98, 0.84, 0.42, 1), sp(11)),
+            (
+                "© 2026 elsty. Все права защищены.\n"
+                "Проприетарная лицензия: копирование, изменение\n"
+                "и распространение игры запрещены.",
+                dp(56),
+                (0.74, 0.86, 0.78, 1),
+                sp(9.5),
+            ),
+        ):
+            label = Label(
+                text=text,
+                font_size=font,
+                color=color,
+                size_hint_y=None,
+                height=height,
+                halign="center",
+                valign="middle",
+            )
+            label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+            box.add_widget(label)
+
+        controls = Label(
+            text=(
+                "Телефон: тяни палец по полю — герой идёт.\n"
+                "ПК: WASD — движение · 1-4 — постройки · U — улучшения\n"
+                "F — волна · T — скорость · Space — пауза"
+            ),
+            font_size=sp(9),
+            color=UI_MUTED,
+            size_hint_y=None,
+            height=dp(58),
+            halign="center",
+            valign="middle",
+        )
+        controls.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(controls)
+
+        self.discord_button = GameButton(
+            "DISCORD · elsty",
+            color=(0.255, 0.300, 0.700, 1),
+            text_color=(0.95, 0.96, 1.0, 1),
+            height=dp(46),
+            radius=13,
+            font_size=sp(13),
+        )
+        box.add_widget(self.discord_button)
+
+        self.close_button = GameButton(
+            "ЗАКРЫТЬ",
+            color=(0.22, 0.24, 0.28, 1),
+            height=dp(46),
+            radius=13,
+            font_size=sp(14),
+        )
+        box.add_widget(self.close_button)
+
+        self.add_panel(box)
+
+
 class MenuScreen(Screen):
     def __init__(self, app_ref, screen_manager, **kwargs):
         super().__init__(**kwargs)
@@ -713,7 +825,7 @@ class MenuScreen(Screen):
         )
         self.add_widget(self.scroll)
 
-        self._base_height = dp(794)
+        self._base_height = dp(528) + self._levels_block()
         self.column = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
@@ -766,11 +878,36 @@ class MenuScreen(Screen):
         self.column.add_widget(self.ad_slot)
         self.column.add_widget(self._spacer(14))
 
+        # --------------------------------------------------- играть / инфо
+        self.play_button = GameButton(
+            text="ИГРАТЬ",
+            color=(0.16, 0.56, 0.30, 1),
+            text_color=(0.96, 1.0, 0.96, 1),
+            height=dp(64),
+            radius=18,
+            font_size=sp(22),
+        )
+        self.play_button.bind(on_release=self._play_continue)
+        self.column.add_widget(self.play_button)
+        self.column.add_widget(self._spacer(8))
+
+        self.info_button = GameButton(
+            text="ИНФОРМАЦИЯ",
+            color=(0.20, 0.24, 0.30, 1),
+            text_color=(0.90, 0.94, 0.98, 1),
+            height=dp(50),
+            radius=15,
+            font_size=sp(14),
+        )
+        self.info_button.bind(on_release=self._open_info)
+        self.column.add_widget(self.info_button)
+        self.column.add_widget(self._spacer(14))
+
         # ---------------------------------------------------------- карты
         self.levels_card = MenuCard(
             orientation="vertical",
             size_hint_y=None,
-            height=dp(402),
+            height=self._levels_block(),
             padding=(dp(12), dp(12)),
             spacing=dp(8),
         )
@@ -910,9 +1047,20 @@ class MenuScreen(Screen):
         self.quit.bind(on_release=self._quit)
         self.add_widget(self.quit)
 
+        self.info = InfoOverlay()
+        self.info.discord_button.bind(on_release=self._discord)
+        self.info.close_button.bind(on_release=lambda *_a: self.info.close())
+        self.add_widget(self.info)
+
         Clock.schedule_once(lambda _dt: self.refresh_levels(), 0)
 
     # ------------------------------------------------------------------
+    @staticmethod
+    def _levels_block() -> float:
+        """Высота карточки со списком карт (растёт с числом карт)."""
+        count = max(1, len(LEVELS))
+        return dp(24) + count * dp(110) + count * dp(8) + dp(24)
+
     @staticmethod
     def _spacer(height: float) -> Widget:
         return Widget(size_hint_y=None, height=height)
@@ -954,6 +1102,17 @@ class MenuScreen(Screen):
         game = self.screen_manager.get_screen("game")
         game.start_level(index)
         self.screen_manager.current = "game"
+
+    def _play_continue(self, *_args) -> None:
+        """Big «ИГРАТЬ»: продолжает с самой дальней открытой карты."""
+        index = max(0, min(len(LEVELS) - 1, PROGRESS.unlocked - 1))
+        self._play(index)
+
+    def _open_info(self, *_args) -> None:
+        self.info.open()
+
+    def _close_info(self, *_args) -> None:
+        self.info.close()
 
     def _quit(self, _instance) -> None:
         self.app_ref.stop()
