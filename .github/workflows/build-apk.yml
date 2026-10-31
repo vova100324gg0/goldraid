@@ -80,7 +80,7 @@ jobs:
     name: Build Windows build
     runs-on: windows-latest
     needs: apk
-    timeout-minutes: 40
+    timeout-minutes: 90
 
     steps:
       - name: Получить исходники
@@ -90,6 +90,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+          cache: "pip"
 
       - name: Зависимости
         run: |
