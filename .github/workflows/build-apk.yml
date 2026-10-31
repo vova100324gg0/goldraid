@@ -90,6 +90,25 @@ jobs:
           make_latest: true
           files: ${{ steps.apk.outputs.filename }}
 
+      - name: Приложить APK к релизу в репозитории кода
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Золотой рейд ${{ github.ref_name }}"
+          body: |
+            **Золотой рейд ${{ github.ref_name }}**
+
+            Android: APK · Windows: ZIP.
+
+            Что нового в 1.4.0:
+            - бесконечный режим: волны без конца и рекорд;
+            - ежедневная карта: новая карта каждый день;
+            - звуковые эффекты и переключатель «Звуки» в настройках;
+            - отдельные рекорды для каждого режима;
+            - мелкие исправления интерфейса.
+          make_latest: true
+          files: ${{ steps.apk.outputs.filename }}
+
   windows:
     name: Build Windows build
     runs-on: windows-latest
@@ -135,6 +154,25 @@ jobs:
         with:
           repository: vova100324gg0/goldraid-downloads
           token: ${{ secrets.RELEASE_TOKEN }}
+          name: "Золотой рейд ${{ github.ref_name }}"
+          body: |
+            **Золотой рейд ${{ github.ref_name }}**
+
+            Android: APK · Windows: ZIP.
+
+            Что нового в 1.4.0:
+            - бесконечный режим: волны без конца и рекорд;
+            - ежедневная карта: новая карта каждый день;
+            - звуковые эффекты и переключатель «Звуки» в настройках;
+            - отдельные рекорды для каждого режима;
+            - мелкие исправления интерфейса.
+          make_latest: true
+          files: build/windows/goldraid-1.4.0-windows.zip
+
+      - name: Приложить архив к релизу в репозитории кода
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
           name: "Золотой рейд ${{ github.ref_name }}"
           body: |
             **Золотой рейд ${{ github.ref_name }}**
