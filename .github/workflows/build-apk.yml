@@ -111,16 +111,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
 
-      - name: Ускорить сборку (Defender)
-        shell: powershell
-        run: |
-          # На windows-latest антивирус сканирует каждый файл PyInstaller и
-          # растягивает сборку до 1.5 часов. Исключаем папку сборки из проверки.
-          try { Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction Stop } catch {}
-          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop } catch {}
-          Write-Output "Defender tuning done"
-
       - name: Собрать Windows-версию
+        env:
+          # PyInstaller при анализе импортирует kivy.core.window, а Kivy создаёт
+          # окно. На раннере без видеокарты драйвер отдаёт OpenGL 1.1, Kivy
+          # показывает модальное окно «Minimum required OpenGL version (2.0)
+          # NOT found» и ждёт нажатия кнопки — сборка висит до таймаута.
+          # Mock-бэкенд убирает проверку GL и это окно.
+          KIVY_GL_BACKEND: mock
         run: powershell -ExecutionPolicy Bypass -File build_windows.ps1 -Version 1.4.0 -NoVenv
 
       - name: Загрузить архив как артефакт
