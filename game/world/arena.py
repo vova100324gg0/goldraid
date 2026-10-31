@@ -46,6 +46,8 @@ from ..entities.entities import (
     make_enemy,
 )
 from .levels import LEVELS, Level
+from ..core.i18n import t
+from ..core.progress import PROGRESS
 from ..render.renderer import draw_arena
 from ..render.sprites import draw_building, draw_castle, draw_slot, draw_spawn_marker
 from ..core.util import clamp, dist, normalize
@@ -107,7 +109,7 @@ class Arena(Widget):
         self.bind(size=self._on_size, pos=self._on_size)
         # Клавиатура для ПК: WASD и стрелки.
         Window.bind(on_key_down=self.on_key_down, on_key_up=self.on_key_up)
-        Clock.schedule_interval(self._tick, 1 / 60)
+        self._tick_event = Clock.schedule_interval(self._tick, 1 / 60)
 
     # ------------------------------------------------------------------
     # Состояние
@@ -119,6 +121,7 @@ class Arena(Widget):
         self.world_w = level.world_w
         self.world_h = level.world_h
         self.hero_bounds = (40.0, 40.0, self.world_w - 40.0, self.world_h - 40.0)
+        self.low_detail = PROGRESS.quality == "low"
         self._rebuild_background()
         self._reset_state()
 
@@ -143,6 +146,8 @@ class Arena(Widget):
         self.base_max_hp = float(level.base_hp)
         self.base_hp = float(level.base_hp)
         self.kills = 0
+        self.bosses_killed = 0
+        self.buildings_built = 0
         self.upgrades = {key: 0 for key in GLOBAL_UPGRADES}
         self.buildings: list[Building] = []
         self.defenders: list[Defender] = []
@@ -190,6 +195,21 @@ class Arena(Widget):
         self.paused = False
         self._clear_input()
 
+    def dispose(self) -> None:
+        """Освобождает таймеры и клавиатуру при пересборке интерфейса."""
+        event = getattr(self, "_tick_event", None)
+        if event is not None:
+            event.cancel()
+            self._tick_event = None
+        try:
+            Window.unbind(
+                on_key_down=self.on_key_down, on_key_up=self.on_key_up
+            )
+        except Exception:
+            pass
+        self.running = False
+        self.paused = False
+
     def pause(self) -> None:
         self.paused = True
         self._clear_input()
@@ -219,7 +239,7 @@ class Arena(Widget):
             "gold_earned": int(self.gold_earned),
             "wave": self.wave,
             "total_waves": self.level.waves,
-            "level_name": self.level.name,
+            "level_name": t(self.level.name),
             "level_index": self.level_index,
             "wave_state": self.wave_state,
             "wave_timer": max(0.0, self.wave_timer),
@@ -245,8 +265,13 @@ class Arena(Widget):
             "preview": self._preview_text(),
             "boss_hp": boss.hp if boss else 0.0,
             "boss_max": boss.max_hp if boss else 0.0,
-            "boss_name": ENEMY_TYPES.get(boss.kind, {}).get("name", "") if boss else "",
+            "boss_name": (
+                t(ENEMY_TYPES.get(boss.kind, {}).get("name", ""))
+                if boss else ""
+            ),
             "boss": boss is not None,
+            "bosses_killed": self.bosses_killed,
+            "buildings_built": self.buildings_built,
         }
 
     def _strongest_boss(self) -> Enemy | None:
@@ -265,16 +290,18 @@ class Arena(Widget):
         count = len(units)
         labels = []
         if "boss" in units:
-            labels.append("босс")
+            labels.append(t("босс"))
         elif "chief" in units:
-            labels.append("вожак")
+            labels.append(t("вожак"))
         kinds = {ENEMY_TYPES.get(kind, {}).get("name", "") for kind in units}
         if "Шаман" in kinds:
-            labels.append("шаманы")
+            labels.append(t("шаманы"))
         if "Лучник" in kinds:
-            labels.append("лучники")
-        extra = f" · {', '.join(labels)}" if labels else ""
-        return f"{count} врагов{extra}"
+            labels.append(t("лучники"))
+        extra = (
+            t(" · {labels}").format(labels=", ".join(labels)) if labels else ""
+        )
+        return t("{count} врагов{extra}").format(count=count, extra=extra)
 
     # ------------------------------------------------------------------
     # Строительство и улучшения
@@ -300,15 +327,15 @@ class Arena(Widget):
 
     def build(self, index: int, kind: str) -> tuple[bool, str]:
         if kind not in BUILD_TYPES:
-            return False, "Неизвестная постройка"
+            return False, t("Неизвестная постройка")
         if index < 0 or index >= len(self.level.slots):
-            return False, "Неверная площадка"
+            return False, t("Неверная площадка")
         if not self.slot_free(index):
-            return False, "Площадка занята"
+            return False, t("Площадка занята")
         data = BUILD_TYPES[kind]
         cost = self.build_cost(kind)
         if self.gold < cost:
-            return False, "Не хватает золота"
+            return False, t("Не хватает золота")
         self.gold -= cost
         x, y = self.level.slots[index]
         hp = float(data["hp"][0])
@@ -324,6 +351,7 @@ class Arena(Widget):
             timer=float(data["period"][0]) if kind == "mine" else 0.0,
         )
         self.buildings.append(building)
+        self.buildings_built += 1
         self.build_mode = None
         self._build_focus = None
         self.slow_dirty = True
@@ -331,7 +359,7 @@ class Arena(Widget):
         self._add_particles(x, y + 26, 10, (1.0, 0.86, 0.36, 1), speed=90)
         if kind == "barracks":
             self._spawn_defender(building)
-        return True, f"{data['name']} построена"
+        return True, t("{name} построена").format(name=t(data["name"]))
 
     def building_upgrade_cost(self, building: Building) -> int:
         data = BUILD_TYPES[building.kind]
@@ -343,48 +371,48 @@ class Arena(Widget):
         maxed = level >= data["max_level"]
         cost = 0 if maxed else self.building_upgrade_cost(building)
         if building.kind == "mine":
-            effect = (
-                f"{data['income'][level - 1]} золота "
-                f"каждые {data['period'][level - 1]:.1f} с"
+            effect = t("{income} золота каждые {period} с").format(
+                income=data["income"][level - 1],
+                period=f"{data['period'][level - 1]:.1f}",
             )
             nxt = ""
             if not maxed:
-                nxt = (
-                    f"далее: {data['income'][level]} за "
-                    f"{data['period'][level]:.1f} с"
+                nxt = t("далее: {income} за {period} с").format(
+                    income=data["income"][level],
+                    period=f"{data['period'][level]:.1f}",
                 )
         elif building.kind == "tower":
-            effect = (
-                f"Урон {data['damage'][level - 1]} · "
-                f"дальность {data['range'][level - 1]}"
+            effect = t("Урон {damage} · дальность {range}").format(
+                damage=data["damage"][level - 1],
+                range=data["range"][level - 1],
             )
             nxt = ""
             if not maxed:
-                nxt = (
-                    f"далее: урон {data['damage'][level]}, "
-                    f"дальность {data['range'][level]}"
+                nxt = t("далее: урон {damage}, дальность {range}").format(
+                    damage=data["damage"][level],
+                    range=data["range"][level],
                 )
         elif building.kind == "totem":
-            effect = (
-                f"+{int(data['boost'][level - 1] * 100)}% урона в радиусе "
-                f"{data['aura'][level - 1]}"
+            effect = t("+{boost}% урона в радиусе {aura}").format(
+                boost=int(data["boost"][level - 1] * 100),
+                aura=data["aura"][level - 1],
             )
             nxt = ""
             if not maxed:
-                nxt = (
-                    f"далее: +{int(data['boost'][level] * 100)}% в радиусе "
-                    f"{data['aura'][level]}"
+                nxt = t("далее: +{boost}% в радиусе {aura}").format(
+                    boost=int(data["boost"][level] * 100),
+                    aura=data["aura"][level],
                 )
         else:
-            effect = (
-                f"Бойцов {data['squad'][level - 1] + self.upgrades['squad']} · "
-                f"урон {data['defender_damage'][level - 1]}"
+            effect = t("Бойцов {squad} · урон {damage}").format(
+                squad=data["squad"][level - 1] + self.upgrades["squad"],
+                damage=data["defender_damage"][level - 1],
             )
             nxt = ""
             if not maxed:
-                nxt = (
-                    f"далее: {data['squad'][level] + self.upgrades['squad']} бойцов, "
-                    f"урон {data['defender_damage'][level]}"
+                nxt = t("далее: {squad} бойцов, урон {damage}").format(
+                    squad=data["squad"][level] + self.upgrades["squad"],
+                    damage=data["defender_damage"][level],
                 )
         return {
             "kind": building.kind,
@@ -401,13 +429,13 @@ class Arena(Widget):
 
     def upgrade_building(self, building: Building) -> tuple[bool, str]:
         if building not in self.buildings:
-            return False, "Постройка разрушена"
+            return False, t("Постройка разрушена")
         data = BUILD_TYPES[building.kind]
         if building.level >= data["max_level"]:
-            return False, "Максимальный уровень"
+            return False, t("Максимальный уровень")
         cost = self.building_upgrade_cost(building)
         if self.gold < cost:
-            return False, "Не хватает золота"
+            return False, t("Не хватает золота")
         self.gold -= cost
         building.level += 1
         old_max = building.max_hp
@@ -418,7 +446,9 @@ class Arena(Widget):
         self._add_ring(building.x, building.y + 30, 30, (1.0, 0.86, 0.30, 1))
         self._add_particles(building.x, building.y + 40, 8, (1.0, 0.88, 0.40, 1), speed=70)
         self.slow_dirty = True
-        return True, f"{data['name']} улучшена до ур. {building.level}"
+        return True, t("{name} улучшена до ур. {level}").format(
+            name=t(data["name"]), level=building.level
+        )
 
     def upgrade_cost(self, key: str) -> int:
         data = GLOBAL_UPGRADES[key]
@@ -429,12 +459,12 @@ class Arena(Widget):
 
     def buy_upgrade(self, key: str) -> tuple[bool, str]:
         if key not in GLOBAL_UPGRADES:
-            return False, "Неизвестное улучшение"
+            return False, t("Неизвестное улучшение")
         if self.upgrade_maxed(key):
-            return False, "Максимальный уровень"
+            return False, t("Максимальный уровень")
         cost = self.upgrade_cost(key)
         if self.gold < cost:
-            return False, "Не хватает золота"
+            return False, t("Не хватает золота")
         self.gold -= cost
         self.upgrades[key] += 1
         if key == "armor":
@@ -448,7 +478,9 @@ class Arena(Widget):
                 if building.kind == "barracks":
                     self._spawn_defender(building)
         self._draw()
-        return True, f"{GLOBAL_UPGRADES[key]['name']} улучшен"
+        return True, t("{name} улучшен").format(
+            name=t(GLOBAL_UPGRADES[key]["name"])
+        )
 
     def set_build_mode(self, kind: str | None) -> str | None:
         """Включает/выключает режим строительства. Возвращает активный тип."""
@@ -469,7 +501,9 @@ class Arena(Widget):
     def toggle_speed(self) -> float:
         """Переключает 1x / 2x и возвращает новое значение."""
         self.time_scale = 2.0 if self.time_scale == 1.0 else 1.0
-        self.on_toast(f"Скорость боя x{int(self.time_scale)}", "info")
+        self.on_toast(
+            t("Скорость боя x{n}").format(n=int(self.time_scale)), "info"
+        )
         return self.time_scale
 
     def wave_call_bonus(self) -> int:
@@ -483,15 +517,17 @@ class Arena(Widget):
     def call_wave_now(self) -> tuple[bool, str]:
         """Запускает подготовленную волну сразу и платит бонус."""
         if self.ended:
-            return False, "Бой уже окончен"
+            return False, t("Бой уже окончен")
         if self.wave_state != "prep":
-            return False, "Волна уже идёт"
+            return False, t("Волна уже идёт")
         bonus = self.wave_call_bonus()
         self.gold += bonus
         self.gold_earned += bonus
         self.wave_timer = 0.0
         self._start_wave(bonus)
-        return True, f"Волна {self.wave} началась · +{bonus} золота"
+        return True, t("Волна {wave} началась · +{bonus} золота").format(
+            wave=self.wave, bonus=bonus
+        )
 
     # ------------------------------------------------------------------
     # Продажа построек
@@ -509,7 +545,7 @@ class Arena(Widget):
 
     def sell_building(self, building: Building) -> tuple[bool, str]:
         if building not in self.buildings:
-            return False, "Постройка уже разрушена"
+            return False, t("Постройка уже разрушена")
         refund = self.building_refund(building)
         data = BUILD_TYPES[building.kind]
         self.gold += refund
@@ -524,28 +560,30 @@ class Arena(Widget):
         self._add_particles(building.x, building.y + 26, 8, (1.0, 0.84, 0.34, 1), speed=80)
         self.slow_dirty = True
         self._draw()
-        return True, f"{data['name']} продана · +{refund} золота"
+        return True, t("{name} продана · +{refund} золота").format(
+            name=t(data["name"]), refund=refund
+        )
 
     # ------------------------------------------------------------------
     # Магазин
     # ------------------------------------------------------------------
     def item_available(self, key: str) -> tuple[bool, str]:
         if key not in SHOP_ITEMS:
-            return False, "Неизвестный товар"
+            return False, t("Неизвестный товар")
         data = SHOP_ITEMS[key]
         if self.gold < data["cost"]:
-            return False, "Не хватает золота"
+            return False, t("Не хватает золота")
         if key == "heal":
             if self.hero.hp <= 0:
-                return False, "Герой возрождается"
+                return False, t("Герой возрождается")
             if self.hero.hp >= self.hero.max_hp:
-                return False, "Герой полон сил"
+                return False, t("Герой полон сил")
         elif key == "repair":
             if self.base_hp >= self.base_max_hp:
-                return False, "База не повреждена"
+                return False, t("База не повреждена")
         elif key == "guard":
             if not any(b.kind == "barracks" for b in self.buildings):
-                return False, "Сначала построй казармы"
+                return False, t("Сначала построй казармы")
         return True, ""
 
     def buy_item(self, key: str) -> tuple[bool, str]:
@@ -574,7 +612,7 @@ class Arena(Widget):
                     self._spawn_defender(building)
                     break
         self._draw()
-        return True, f"Куплено: {data['name']}"
+        return True, t("Куплено: {name}").format(name=t(data["name"]))
 
     # ------------------------------------------------------------------
     # Ввод
@@ -610,7 +648,7 @@ class Arena(Widget):
         for index, (sx, sy) in enumerate(self.level.slots):
             if dist(wx, wy, sx, sy) > 54 or not self.slot_free(index):
                 continue
-            self.on_toast("Выбери постройку на нижней панели", "info")
+            self.on_toast(t("Выбери постройку на нижней панели"), "info")
             return True
 
         self._joy_uid = touch.uid
@@ -723,7 +761,7 @@ class Arena(Widget):
                 hero.x, hero.y = self.level.base_pos[0], self.level.base_pos[1] - 88
                 hero.vx = hero.vy = 0.0
                 hero.invuln = 2.0
-                self.on_toast("Герой вернулся в бой", "blue")
+                self.on_toast(t("Герой вернулся в бой"), "blue")
             return
 
         hero.invuln = max(0.0, hero.invuln - dt)
@@ -910,7 +948,9 @@ class Arena(Widget):
                 self.gold_earned += coin.value
                 self._add_ring(coin.x, coin.y, 18, (1.0, 0.86, 0.32, 1))
                 self._add_particles(coin.x, coin.y + 6, 6, (1.0, 0.88, 0.36, 1), speed=70)
-                self.on_toast(f"+{coin.value} золота", "gold")
+                self.on_toast(
+                    t("+{amount} золота").format(amount=coin.value), "gold"
+                )
         self.pickup_timer -= dt
         if self.pickup_timer > 0 or len(self.pickups) >= GOLD_PILE_COUNT:
             return
@@ -1105,13 +1145,19 @@ class Arena(Widget):
         self.next_units = []
         self.spawn_timer = 0.0
         count = len(self.pending)
-        label = f"ВОЛНА {self.wave} · врагов: {count}"
+        label = t("ВОЛНА {wave} · врагов: {count}").format(
+            wave=self.wave, count=count
+        )
         if "boss" in self.pending:
-            label = f"ВОЛНА {self.wave} · БОСС И {count - 1} ВРАГОВ"
+            label = t("ВОЛНА {wave} · БОСС И {count} ВРАГОВ").format(
+                wave=self.wave, count=count - 1
+            )
         elif "chief" in self.pending:
-            label = f"ВОЛНА {self.wave} · ВОЖАК И {count - 1} ВРАГОВ"
+            label = t("ВОЛНА {wave} · ВОЖАК И {count} ВРАГОВ").format(
+                wave=self.wave, count=count - 1
+            )
         if bonus:
-            label += f" · +{bonus} золота"
+            label += t(" · +{bonus} золота").format(bonus=bonus)
         self.on_toast(label, "bad")
 
     def _update_waves(self, dt: float) -> None:
@@ -1161,10 +1207,10 @@ class Arena(Widget):
 
         self.enemies.append(enemy)
         if kind == "boss":
-            self.on_toast("АЛЫЙ БОСС ВЕДЁТ АРМИЮ!", "bad")
+            self.on_toast(t("АЛЫЙ БОСС ВЕДЁТ АРМИЮ!"), "bad")
             self._shake = 12.0
         elif kind == "chief":
-            self.on_toast("Вожак ведёт отряд!", "bad")
+            self.on_toast(t("Вожак ведёт отряд!"), "bad")
             self._shake = 6.0
 
     def _complete_wave(self) -> None:
@@ -1174,7 +1220,12 @@ class Arena(Widget):
         if self.wave >= self.level.waves:
             self._end(True)
             return
-        self.on_toast(f"Волна {self.wave} отбита! +{bonus} золота", "gold")
+        self.on_toast(
+            t("Волна {wave} отбита! +{bonus} золота").format(
+                wave=self.wave, bonus=bonus
+            ),
+            "gold",
+        )
         self.wave += 1
         self.wave_state = "prep"
         self.wave_timer = self.level.wave_pause
@@ -1199,7 +1250,7 @@ class Arena(Widget):
             speed=60,
         )
         if self._base_notice_cd <= 0:
-            self.on_toast("База под атакой!", "bad")
+            self.on_toast(t("База под атакой!"), "bad")
             self._base_notice_cd = 5.0
         if self.base_hp <= 0:
             self.base_hp = 0
@@ -1215,7 +1266,9 @@ class Arena(Widget):
             return
         self.buildings.remove(building)
         data = BUILD_TYPES[building.kind]
-        self.on_toast(f"{data['name']} разрушена!", "bad")
+        self.on_toast(
+            t("{name} разрушена!").format(name=t(data["name"])), "bad"
+        )
         self._add_puff(building.x, building.y + 24, (0.85, 0.52, 0.24, 1))
         self._shake = max(self._shake, 9.0)
 
@@ -1244,7 +1297,7 @@ class Arena(Widget):
         if hero.hp <= 0:
             hero.hp = 0
             self.respawn_timer = HERO_RESPAWN
-            self.on_toast("Герой пал! Вернётся через 4 с", "bad")
+            self.on_toast(t("Герой пал! Вернётся через 4 с"), "bad")
 
     def _end(self, win: bool) -> None:
         if self.ended:
@@ -1294,9 +1347,12 @@ class Arena(Widget):
         if enemy.explode > 0:
             self._explode_enemy(enemy)
         if enemy.boss:
+            self.bosses_killed += 1
             self._shake = 14.0
             self.on_toast(
-                "Босс повержен!" if enemy.kind == "boss" else "Вожак повержен!",
+                t("Босс повержен!")
+                if enemy.kind == "boss"
+                else t("Вожак повержен!"),
                 "gold",
             )
 
@@ -1319,7 +1375,7 @@ class Arena(Widget):
             self._add_puff(hero.x, hero.y, (1.0, 0.45, 0.20, 1))
             if hero.hp <= 0:
                 self.respawn_timer = HERO_RESPAWN
-                self.on_toast("Герой пал от взрыва! Вернётся через 4 с", "bad")
+                self.on_toast(t("Герой пал от взрыва! Вернётся через 4 с"), "bad")
         bx, by = self.level.base_pos
         if dist(enemy.x, enemy.y, bx, by) <= radius + 40:
             self._damage_base(damage * 0.5)
@@ -1502,8 +1558,31 @@ class Arena(Widget):
         self.frame_ms += (spent - self.frame_ms) * 0.08
         self._update_quality()
 
+    def apply_quality(self) -> None:
+        """Применяет выбранное в настройках качество графики."""
+        mode = PROGRESS.quality
+        if mode == "auto":
+            self._quality_frames = 0
+            return
+        target = mode == "low"
+        if target != self.low_detail:
+            self.low_detail = target
+            self._rebuild_background()
+        self._quality_frames = 0
+
     def _update_quality(self) -> None:
         """Включает упрощённую графику, если кадры стабильно тяжёлые."""
+        mode = PROGRESS.quality
+        if mode == "low":
+            if not self.low_detail:
+                self.low_detail = True
+                self._rebuild_background()
+            return
+        if mode == "high":
+            if self.low_detail:
+                self.low_detail = False
+                self._rebuild_background()
+            return
         self._quality_frames += 1
         if self._quality_frames < 40:
             return

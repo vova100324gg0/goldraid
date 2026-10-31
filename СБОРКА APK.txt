@@ -3,7 +3,7 @@
 
 ГОТОВЫЙ APK УЖЕ СОБРАН
 ----------------------
-Файл: goldraid-1.2.0-arm64-v8a_armeabi-v7a-debug.apk (~47 МБ)
+Файл: goldraid-1.3.0-arm64-v8a_armeabi-v7a-debug.apk (~47 МБ)
 Он лежит в двух местах:
   - apk\  (в корне проекта)
   - Сборка\Золотой рейд\apk\  (в комплекте для игрока)
@@ -32,7 +32,7 @@ Linux-окружения нет, поэтому локально собрать 
    Через git в PowerShell:
        git init
        git add .
-       git commit -m "Золотой рейд 1.2.0"
+       git commit -m "Золотой рейд 1.3.0"
        git branch -M main
        git remote add origin https://github.com/ВАШ_ЛОГИН/goldraid.git
        git push -u origin main
@@ -41,9 +41,9 @@ Linux-окружения нет, поэтому локально собрать 
 4. Дождитесь зелёной галочки (~20-40 минут, первый раз дольше).
 5. Откройте завершённый запуск, внизу раздел Artifacts ->
    скачайте goldraid-apk.zip. Внутри —
-   goldraid-1.2.0-arm64-v8a_armeabi-v7a-debug.apk.
+   goldraid-1.3.0-arm64-v8a_armeabi-v7a-debug.apk.
 
-Готовый APK также выложен в разделе Releases (тег v1.2.0).
+Готовый APK также выложен в разделе Releases (тег v1.3.0).
 
 
 СПОСОБ 2. WSL2 на этом ПК
@@ -75,9 +75,9 @@ Linux-окружения нет, поэтому локально собрать 
 - Телефон: скопируйте APK, откройте файл, разрешите установку
   из неизвестных источников.
 - Телевизор (например, Philips на Android TV): подключите ADB и выполните
-       tv-adb.cmd install apk\goldraid-1.2.0-arm64-v8a_armeabi-v7a-debug.apk
+       tv-adb.cmd install apk\goldraid-1.3.0-arm64-v8a_armeabi-v7a-debug.apk
   Или: adb connect <IP_ТЕЛЕВИЗОРА>:5555
-       adb install -r apk\goldraid-1.2.0-arm64-v8a_armeabi-v7a-debug.apk
+       adb install -r apk\goldraid-1.3.0-arm64-v8a_armeabi-v7a-debug.apk
 
 APK собран в режиме debug — для установки на свои устройства этого
 достаточно. Для Google Play нужен release-ключ и сборка
@@ -87,7 +87,7 @@ APK собран в режиме debug — для установки на сво
 ЧТО ВНУТРИ APK
 --------------
 - package.domain = org.goldraid, package.name = goldraid
-- version = 1.2.0, минимальный Android 5.0 (API 21), target API 33
+- version = 1.3.0, минимальный Android 5.0 (API 21), target API 33
 - архитектуры arm64-v8a и armeabi-v7a
 - Kivy 2.3.1 + Pillow, полноэкранный режим
 - прогресс сохраняется в приватной папке приложения

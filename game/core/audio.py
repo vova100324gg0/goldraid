@@ -11,6 +11,8 @@ import os
 import sys
 from pathlib import Path
 
+from .i18n import t
+
 # Тема локации. Одна мелодия может обслуживать несколько похожих карт.
 THEME_BY_LEVEL = {
     "tutorial": "green",
@@ -58,7 +60,7 @@ def music_dir() -> Path:
 
 
 def theme_title(theme: str) -> str:
-    return _TITLES.get(theme, theme)
+    return t(_TITLES.get(theme, theme))
 
 
 class MusicPlayer:

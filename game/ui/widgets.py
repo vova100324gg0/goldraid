@@ -17,6 +17,7 @@ from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
 from ..core.config import BUILD_TYPES, SAFE_BOTTOM, SAFE_SIDE, SAFE_TOP, TOTAL_WAVES
+from ..core.i18n import t
 from ..render.gfx import star
 from ..render.icons import draw_icon
 
@@ -418,9 +419,9 @@ class HUD(FloatLayout):
             height=dp(50),
             spacing=dp(6),
         )
-        self.base_chip = StatPill("base", "БАЗА", "600", (0.48, 0.92, 0.58, 1))
-        self.gold_chip = StatPill("coin", "ЗОЛОТО", "0", (1.0, 0.86, 0.38, 1))
-        self.wave_chip = StatPill("wave", "ВОЛНА", f"1/{TOTAL_WAVES}", (0.86, 0.92, 1.0, 1))
+        self.base_chip = StatPill("base", t("БАЗА"), "600", (0.48, 0.92, 0.58, 1))
+        self.gold_chip = StatPill("coin", t("ЗОЛОТО"), "0", (1.0, 0.86, 0.38, 1))
+        self.wave_chip = StatPill("wave", t("ВОЛНА"), f"1/{TOTAL_WAVES}", (0.86, 0.92, 1.0, 1))
         row.add_widget(self.base_chip)
         row.add_widget(self.gold_chip)
         row.add_widget(self.wave_chip)
@@ -435,7 +436,7 @@ class HUD(FloatLayout):
             height=dp(50),
             spacing=dp(6),
         )
-        self.hero_chip = StatPill("hero", "ГЕРОЙ", "100 / 100", (0.72, 0.95, 0.78, 1))
+        self.hero_chip = StatPill("hero", t("ГЕРОЙ"), "100 / 100", (0.72, 0.95, 0.78, 1))
         self.hero_chip.size_hint_x = 1
         row2.add_widget(self.hero_chip)
 
@@ -535,7 +536,9 @@ class HUD(FloatLayout):
         hero_max = max(1, int(stats.get("hero_max_hp", 1)))
         if stats.get("respawn", 0) > 0:
             self.hero_chip.set_value(
-                f"возрождение {math.ceil(stats.get('respawn', 0))} с",
+                t("возрождение {n} с").format(
+                    n=math.ceil(stats.get("respawn", 0))
+                ),
                 (1.0, 0.80, 0.42, 1),
             )
         else:
@@ -545,21 +548,27 @@ class HUD(FloatLayout):
             )
             rage = ""
             if stats.get("rage", 0) > 0:
-                rage = f" · ярость {math.ceil(stats.get('rage', 0))}с"
+                rage = t(" · ярость {n}с").format(
+                    n=math.ceil(stats.get("rage", 0))
+                )
             self.hero_chip.set_value(f"{hero_hp} / {hero_max}{rage}", hero_color)
 
         if stats.get("wave_state") == "prep":
-            status = (
-                f"{stats.get('level_name', '')} · волна "
-                f"{int(stats.get('wave', 1))} через "
-                f"{int(math.ceil(stats.get('wave_timer', 0)))} с · "
-                f"{stats.get('preview', '')}"
+            status = t(
+                "{level} · волна {wave} через {left} с · {preview}"
+            ).format(
+                level=stats.get("level_name", ""),
+                wave=int(stats.get("wave", 1)),
+                left=int(math.ceil(stats.get("wave_timer", 0))),
+                preview=stats.get("preview", ""),
             )
         else:
-            status = (
-                f"{stats.get('level_name', '')} · волна "
-                f"{int(stats.get('wave', 1))} · врагов: "
-                f"{int(stats.get('enemies', 0))}"
+            status = t(
+                "{level} · волна {wave} · врагов: {enemies}"
+            ).format(
+                level=stats.get("level_name", ""),
+                wave=int(stats.get("wave", 1)),
+                enemies=int(stats.get("enemies", 0)),
             )
         roam = ""
         if stats.get("base_distance", 0) > 430:
@@ -567,7 +576,9 @@ class HUD(FloatLayout):
                 "севернее": "↑", "южнее": "↓",
                 "западнее": "←", "восточнее": "→",
             }.get(stats.get("base_dir", ""), "•")
-            roam = f" · база {arrow}{int(stats.get('base_distance', 0))}"
+            roam = t(" · база {arrow}{dist}").format(
+                arrow=arrow, dist=int(stats.get("base_distance", 0))
+            )
         if speed > 1.0:
             roam += f" · x{int(speed)}"
         _set_text(self.status_label, status + roam)
@@ -577,7 +588,13 @@ class HUD(FloatLayout):
             boss_hp = max(0.0, float(stats.get("boss_hp", 0)))
             self.boss_row.opacity = 1
             self.boss_row.height = dp(20)
-            _set_text(self.boss_label, f"{stats.get('boss_name', 'БОСС')}: {int(boss_hp)}")
+            _set_text(
+                self.boss_label,
+                t("{name}: {hp}").format(
+                    name=stats.get("boss_name") or t("БОСС"),
+                    hp=int(boss_hp),
+                ),
+            )
             self.boss_meter.set_ratio(boss_hp / boss_max, (1.0, 0.35, 0.28, 1))
         else:
             self.boss_row.opacity = 0
@@ -663,7 +680,7 @@ class BuildBar(FloatLayout):
         self.panel_ref = panel
 
         self.hint = Label(
-            text="Строй и защищай базу",
+            text=t("Строй и защищай базу"),
             font_size=sp(10),
             color=(0.78, 0.90, 0.82, 1),
             halign="center",
@@ -689,7 +706,9 @@ class BuildBar(FloatLayout):
                 kind,
                 icons.get(kind, kind),
                 color=data["color"],
-                text=f"{data['short']}\n{data['cost']} з.",
+                text=t("{short}\n{cost} з.").format(
+                    short=t(data["short"]), cost=data["cost"]
+                ),
                 font_size=sp(10),
             )
             button.bind(on_release=lambda _inst, k=kind: self.on_build(k))
@@ -697,7 +716,7 @@ class BuildBar(FloatLayout):
             self.buttons[kind] = button
 
         self.upgrade_button = GameButton(
-            text="УЛУЧШ.\n+",
+            text=t("УЛУЧШ.\n+"),
             color=(0.30, 0.20, 0.52, 1),
             text_color=(1.0, 0.92, 1.0, 1),
             height=dp(76),
@@ -746,12 +765,14 @@ class BuildBar(FloatLayout):
             button.set_active(active)
             button.disabled = (not active) and gold < cost
         if mode is None:
-            _set_text(self.hint, "Строй и защищай базу")
+            _set_text(self.hint, t("Строй и защищай базу"))
         else:
             _set_text(
                 self.hint,
-                f"{BUILD_TYPES[mode]['name']}: выбери свободную площадку · "
-                "нажми кнопку ещё раз, чтобы отменить",
+                t(
+                    "{name}: выбери свободную площадку · "
+                    "нажми кнопку ещё раз, чтобы отменить"
+                ).format(name=t(BUILD_TYPES[mode]["name"])),
             )
 
 
@@ -899,10 +920,17 @@ class WavePrompt(FloatLayout):
         left = int(math.ceil(float(stats.get("wave_timer", 0))))
         bonus = int(stats.get("call_bonus", 0))
         if wave >= total:
-            caption = "ПОСЛЕДНЯЯ ВОЛНА"
+            caption = t("ПОСЛЕДНЯЯ ВОЛНА")
         else:
-            caption = f"ВОЛНА {wave} ЧЕРЕЗ {left} С"
-        _set_text(self.button, f"{caption}\nВЫЗВАТЬ РАНЬШЕ · +{bonus} З.")
+            caption = t("ВОЛНА {wave} ЧЕРЕЗ {left} С").format(
+                wave=wave, left=left
+            )
+        _set_text(
+            self.button,
+            t("{caption}\nВЫЗВАТЬ РАНЬШЕ · +{bonus} З.").format(
+                caption=caption, bonus=bonus
+            ),
+        )
 
     def on_touch_down(self, touch):
         if not self.visible:

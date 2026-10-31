@@ -33,7 +33,10 @@ from ..core.config import (
 )
 from ..render.gfx import circle, poly, ring
 from ..world.levels import LEVELS, TUTORIAL, TUTORIAL_HINTS
+from ..core.achievements import ACHIEVEMENTS, check_achievements, unlocked_count
 from ..core.audio import MENU_THEME, THEME_BY_LEVEL, music
+from ..core.changelog import CHANGELOG, latest_version
+from ..core.i18n import LANGUAGES, set_language, t
 from ..core.progress import PROGRESS
 from ..core.util import open_url
 from .widgets import BuildBar, GameButton, HUD, Overlay, StarRow, Toast, WavePrompt
@@ -106,8 +109,15 @@ class Backdrop(FloatLayout):
                 self._spark_colors.append(spark_color)
                 self._spark_ellipses.append(spark_ellipse)
         self.bind(pos=self._layout, size=self._layout)
-        Clock.schedule_interval(self._animate, 1 / 30)
+        self._event = Clock.schedule_interval(self._animate, 1 / 30)
         self._layout()
+
+    def dispose(self) -> None:
+        self.running = False
+        event = getattr(self, "_event", None)
+        if event is not None:
+            event.cancel()
+            self._event = None
 
     def _layout(self, *_args) -> None:
         width, height = self.size
@@ -477,7 +487,7 @@ class LevelTile(GameButton):
         )
         self.record.halign = "right"
         self.stars = StarRow(0)
-        self.status = Badge("ИГРАТЬ")
+        self.status = Badge(t("ИГРАТЬ"))
         for widget in (
             self.title,
             self.subtitle,
@@ -548,25 +558,29 @@ class LevelTile(GameButton):
     def set_data(self, available: bool, stars: int, best_wave: int) -> None:
         self._locked = not available
         self.disabled = not available
-        self.title.text = self.level.name
-        self.subtitle.text = self.level.subtitle
-        self.meta.text = f"{self.level.waves} волн · {len(self.level.routes)} дороги"
+        self.title.text = t(self.level.name)
+        self.subtitle.text = t(self.level.subtitle)
+        self.meta.text = t("{waves} волн · {roads} дороги").format(
+            waves=self.level.waves, roads=len(self.level.routes)
+        )
         self.stars.count = max(0, min(3, stars))
         if not available:
-            self.record.text = "пройди предыдущую"
+            self.record.text = t("пройди предыдущую")
         elif best_wave:
-            self.record.text = f"лучшая {best_wave}/{self.level.waves}"
+            self.record.text = t("лучшая {best}/{total}").format(
+                best=best_wave, total=self.level.waves
+            )
         else:
-            self.record.text = "ещё не пройдена"
+            self.record.text = t("ещё не пройдена")
         if available:
-            self.status.text = "ИГРАТЬ"
+            self.status.text = t("ИГРАТЬ")
             self.status.set_colors((0.20, 0.60, 0.33, 0.94), (0.94, 1.0, 0.95, 1))
             self.title.color = (0.96, 0.99, 0.95, 1)
             self.subtitle.color = (0.72, 0.86, 0.77, 1)
             self.meta.color = (1.0, 0.84, 0.44, 0.95)
             self.record.color = (0.66, 0.78, 0.69, 1)
         else:
-            self.status.text = "ЗАКРЫТО"
+            self.status.text = t("ЗАКРЫТО")
             self.status.set_colors((0.18, 0.23, 0.20, 0.94), (0.62, 0.68, 0.62, 1))
             self.title.color = (0.66, 0.73, 0.67, 1)
             self.subtitle.color = (0.52, 0.61, 0.54, 1)
@@ -574,8 +588,10 @@ class LevelTile(GameButton):
             self.record.color = (0.50, 0.58, 0.52, 1)
         self.medallion.set_locked(self._locked)
         self._apply_tint()
-        state = "открыто" if available else "закрыто"
-        self.text = f"{self.level.name}\n{self.level.waves} волн · {state}"
+        state = t("открыто") if available else t("закрыто")
+        self.text = t("{name}\n{waves} волн · {state}").format(
+            name=t(self.level.name), waves=self.level.waves, state=state
+        )
 
     def _apply_tint(self) -> None:
         if self._locked:
@@ -607,7 +623,7 @@ class InfoOverlay(Overlay):
         )
 
         title = Label(
-            text="ОБ АВТОРЕ",
+            text=t("ОБ АВТОРЕ"),
             font_size=sp(24),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
@@ -620,7 +636,9 @@ class InfoOverlay(Overlay):
         box.add_widget(title)
 
         version_label = Label(
-            text=f"версия {VERSION} · {GAME_TITLE}",
+            text=t("версия {version} · {title}").format(
+                version=VERSION, title=t(GAME_TITLE)
+            ),
             font_size=sp(10.5),
             bold=True,
             color=UI_MUTED,
@@ -635,17 +653,26 @@ class InfoOverlay(Overlay):
 
         for text, height, color, font in (
             (
-                "Защищай ворота: собирай золото, строй башни, шахты, казармы "
-                "и тотемы, отбивай волны врагов.",
+                t(
+                    "Защищай ворота: собирай золото, строй башни, шахты, казармы "
+                    "и тотемы, отбивай волны врагов."
+                ),
                 dp(44),
                 (0.86, 0.94, 0.88, 1),
                 sp(10.5),
             ),
-            (f"Автор: {AUTHOR}", dp(20), (0.98, 0.84, 0.42, 1), sp(11)),
             (
-                "© 2026 elsty. Все права защищены.\n"
-                "Проприетарная лицензия: копирование, изменение\n"
-                "и распространение игры запрещены.",
+                t("Автор: {author}").format(author=AUTHOR),
+                dp(20),
+                (0.98, 0.84, 0.42, 1),
+                sp(11),
+            ),
+            (
+                t(
+                    "© 2026 elsty. Все права защищены.\n"
+                    "Проприетарная лицензия: копирование, изменение\n"
+                    "и распространение игры запрещены."
+                ),
                 dp(56),
                 (0.74, 0.86, 0.78, 1),
                 sp(9.5),
@@ -664,7 +691,7 @@ class InfoOverlay(Overlay):
             box.add_widget(label)
 
         controls = Label(
-            text=(
+            text=t(
                 "Тяни палец по полю — герой идёт за ним.\n"
                 "Собирай золото и строй обороны вокруг базы."
             ),
@@ -703,7 +730,7 @@ class InfoOverlay(Overlay):
         box.add_widget(self.discord_status)
 
         self.close_button = GameButton(
-            "ЗАКРЫТЬ",
+            t("ЗАКРЫТЬ"),
             color=(0.22, 0.24, 0.28, 1),
             height=dp(44),
             radius=13,
@@ -716,6 +743,339 @@ class InfoOverlay(Overlay):
     def set_discord_status(self, text: str, color) -> None:
         self.discord_status.text = text
         self.discord_status.color = color
+
+
+class SettingsOverlay(Overlay):
+    """Настройки: язык, музыка, качество графики, сброс и «Что нового»."""
+
+    dim_alpha = 0.55
+
+    _LANG_LABEL = {"ru": "РУССКИЙ", "en": "АНГЛИЙСКИЙ"}
+    _QUALITY_LABEL = {
+        "auto": "АВТО",
+        "high": "ВЫСОКОЕ",
+        "low": "НИЗКОЕ",
+    }
+
+    def __init__(
+        self,
+        on_language=None,
+        on_music=None,
+        on_quality=None,
+        on_reset=None,
+        on_whats_new=None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.on_language = on_language or (lambda *_a: None)
+        self.on_music = on_music or (lambda *_a: None)
+        self.on_quality = on_quality or (lambda *_a: None)
+        self.on_reset = on_reset or (lambda *_a: None)
+        self.on_whats_new = on_whats_new or (lambda *_a: None)
+        self._confirm_reset = False
+        self._confirm_event = None
+
+        box = MenuCard(
+            orientation="vertical",
+            size_hint=(0.92, None),
+            height=dp(468),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            padding=(dp(18), dp(14)),
+            spacing=dp(6),
+        )
+        self.title = Label(
+            text=t("НАСТРОЙКИ"),
+            font_size=sp(23),
+            bold=True,
+            color=(1.0, 0.84, 0.35, 1),
+            size_hint_y=None,
+            height=dp(34),
+            halign="center",
+            valign="middle",
+        )
+        self.title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(self.title)
+
+        box.add_widget(self._section(t("ЯЗЫК")))
+        self.language_buttons = {}
+        lang_row = self._row()
+        for code in LANGUAGES:
+            button = self._choice(t(self._LANG_LABEL.get(code, code)))
+            button.bind(on_release=lambda _i, c=code: self.on_language(c))
+            lang_row.add_widget(button)
+            self.language_buttons[code] = button
+        box.add_widget(lang_row)
+
+        box.add_widget(self._section(t("МУЗЫКА")))
+        self.music_button = GameButton(
+            text="",
+            color=(0.15, 0.30, 0.24, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(13),
+        )
+        self.music_button.bind(on_release=lambda *_a: self.on_music())
+        box.add_widget(self.music_button)
+
+        box.add_widget(self._section(t("КАЧЕСТВО ГРАФИКИ")))
+        self.quality_buttons = {}
+        quality_row = self._row()
+        for mode in ("auto", "high", "low"):
+            button = self._choice(
+                t(self._QUALITY_LABEL.get(mode, mode))
+            )
+            button.bind(on_release=lambda _i, m=mode: self.on_quality(m))
+            quality_row.add_widget(button)
+            self.quality_buttons[mode] = button
+        box.add_widget(quality_row)
+
+        self.whats_new_button = GameButton(
+            t("ЧТО НОВОГО"),
+            color=(0.16, 0.22, 0.36, 1),
+            text_color=(0.86, 0.92, 1.0, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(13),
+        )
+        self.whats_new_button.bind(on_release=lambda *_a: self.on_whats_new())
+        box.add_widget(self.whats_new_button)
+
+        self.reset_button = GameButton(
+            t("СБРОСИТЬ ПРОГРЕСС"),
+            color=(0.36, 0.16, 0.14, 1),
+            text_color=(1.0, 0.84, 0.78, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(12.5),
+        )
+        self.reset_button.bind(on_release=self._tap_reset)
+        box.add_widget(self.reset_button)
+
+        self.close_button = GameButton(
+            t("ЗАКРЫТЬ"),
+            color=(0.22, 0.24, 0.28, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(14),
+        )
+        box.add_widget(self.close_button)
+
+        self.add_panel(box)
+
+    def _section(self, text: str) -> Label:
+        label = Label(
+            text=text,
+            font_size=sp(10.5),
+            bold=True,
+            color=(0.62, 0.76, 0.66, 1),
+            size_hint_y=None,
+            height=dp(18),
+            halign="left",
+            valign="middle",
+        )
+        label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        return label
+
+    def _row(self) -> BoxLayout:
+        return BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(44),
+            spacing=dp(8),
+        )
+
+    def _choice(self, text: str) -> GameButton:
+        return GameButton(
+            text=text,
+            color=(0.14, 0.18, 0.22, 1),
+            text_color=(0.82, 0.88, 0.92, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(12),
+        )
+
+    def open(self, *_args) -> None:
+        self._cancel_reset()
+        self.refresh()
+        super().open()
+
+    def refresh(self) -> None:
+        for code, button in self.language_buttons.items():
+            button.set_active(code == PROGRESS.language)
+        self.music_button.text = t("ВКЛ") if PROGRESS.music else t("ВЫКЛ")
+        for mode, button in self.quality_buttons.items():
+            button.set_active(mode == PROGRESS.quality)
+        if not self._confirm_reset:
+            self.reset_button.text = t("СБРОСИТЬ ПРОГРЕСС")
+
+    def _tap_reset(self, *_args) -> None:
+        if not self._confirm_reset:
+            self._confirm_reset = True
+            self.reset_button.text = t("ТОЧНО СБРОСИТЬ?")
+            self._confirm_event = Clock.schedule_once(self._cancel_reset, 4.0)
+            return
+        self._cancel_reset()
+        self.on_reset()
+
+    def _cancel_reset(self, *_args) -> None:
+        if self._confirm_event is not None:
+            self._confirm_event.cancel()
+            self._confirm_event = None
+        self._confirm_reset = False
+        if hasattr(self, "reset_button"):
+            self.reset_button.text = t("СБРОСИТЬ ПРОГРЕСС")
+
+
+class AchievementsOverlay(Overlay):
+    """Список достижений: открытые подсвечены золотом."""
+
+    dim_alpha = 0.55
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        count = len(ACHIEVEMENTS)
+        box = MenuCard(
+            orientation="vertical",
+            size_hint=(0.92, None),
+            height=dp(200) + count * dp(42),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            padding=(dp(18), dp(14)),
+            spacing=dp(6),
+        )
+        self.title = Label(
+            text=t("ДОСТИЖЕНИЯ"),
+            font_size=sp(23),
+            bold=True,
+            color=(1.0, 0.84, 0.35, 1),
+            size_hint_y=None,
+            height=dp(34),
+            halign="center",
+            valign="middle",
+        )
+        self.title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(self.title)
+
+        self.counter = Label(
+            text="",
+            font_size=sp(11),
+            bold=True,
+            color=(0.72, 0.84, 0.74, 1),
+            size_hint_y=None,
+            height=dp(20),
+            halign="center",
+            valign="middle",
+        )
+        self.counter.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(self.counter)
+
+        self.rows = []
+        for _item in ACHIEVEMENTS:
+            label = Label(
+                text="",
+                font_size=sp(11),
+                color=(0.70, 0.78, 0.72, 1),
+                size_hint_y=None,
+                height=dp(42),
+                halign="left",
+                valign="middle",
+            )
+            label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+            box.add_widget(label)
+            self.rows.append(label)
+
+        self.close_button = GameButton(
+            t("ЗАКРЫТЬ"),
+            color=(0.22, 0.24, 0.28, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(14),
+        )
+        box.add_widget(self.close_button)
+
+        self.add_panel(box)
+
+    def open(self, *_args) -> None:
+        self.refresh()
+        super().open()
+
+    def refresh(self) -> None:
+        unlocked = unlocked_count(PROGRESS)
+        self.counter.text = t("ОТКРЫТО {unlocked} ИЗ {total}").format(
+            unlocked=unlocked, total=len(ACHIEVEMENTS)
+        )
+        for item, label in zip(ACHIEVEMENTS, self.rows):
+            done = PROGRESS.has_achievement(item["id"])
+            mark = "★ " if done else "• "
+            label.text = mark + f"{t(item['name'])}\n{t(item['desc'])}"
+            label.color = (
+                (1.0, 0.86, 0.44, 1) if done else (0.60, 0.68, 0.62, 1)
+            )
+
+
+class WhatsNewOverlay(Overlay):
+    """История изменений текущей версии."""
+
+    dim_alpha = 0.55
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.version = latest_version() or VERSION
+        lines = CHANGELOG.get(self.version, [])
+        box = MenuCard(
+            orientation="vertical",
+            size_hint=(0.92, None),
+            height=dp(160) + len(lines) * dp(34),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            padding=(dp(18), dp(14)),
+            spacing=dp(6),
+        )
+        self.title = Label(
+            text="",
+            font_size=sp(21),
+            bold=True,
+            color=(1.0, 0.84, 0.35, 1),
+            size_hint_y=None,
+            height=dp(34),
+            halign="center",
+            valign="middle",
+        )
+        self.title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(self.title)
+
+        self.bullets = []
+        for _line in lines:
+            label = Label(
+                text="",
+                font_size=sp(11),
+                color=(0.84, 0.92, 0.86, 1),
+                size_hint_y=None,
+                height=dp(34),
+                halign="left",
+                valign="middle",
+            )
+            label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+            box.add_widget(label)
+            self.bullets.append(label)
+
+        self.close_button = GameButton(
+            t("ЗАКРЫТЬ"),
+            color=(0.22, 0.24, 0.28, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(14),
+        )
+        box.add_widget(self.close_button)
+
+        self.add_panel(box)
+
+    def open(self, *_args) -> None:
+        self.refresh()
+        super().open()
+
+    def refresh(self) -> None:
+        self.title.text = t("ЧТО НОВОГО · {version}").format(version=self.version)
+        for label, line in zip(self.bullets, CHANGELOG.get(self.version, [])):
+            label.text = t(line)
 
 
 class MenuScreen(Screen):
@@ -753,7 +1113,7 @@ class MenuScreen(Screen):
         brand.add_widget(self.emblem)
 
         title = Label(
-            text=GAME_TITLE,
+            text=t(GAME_TITLE),
             font_size=sp(30),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
@@ -769,7 +1129,7 @@ class MenuScreen(Screen):
         brand.add_widget(title)
 
         tagline = Label(
-            text="ОБОРОНА · ВОЛНЫ · ЗОЛОТО",
+            text=t("ОБОРОНА · ВОЛНЫ · ЗОЛОТО"),
             font_size=sp(9.5),
             bold=True,
             color=(0.62, 0.78, 0.67, 0.95),
@@ -787,7 +1147,7 @@ class MenuScreen(Screen):
 
         # ---------------------------------------------- продолжить / играть
         self.continue_button = GameButton(
-            text="ПРОДОЛЖИТЬ",
+            text=t("ПРОДОЛЖИТЬ"),
             color=(0.16, 0.56, 0.30, 1),
             text_color=(0.96, 1.0, 0.96, 1),
             height=dp(64),
@@ -799,7 +1159,7 @@ class MenuScreen(Screen):
         self.column.add_widget(self._spacer(9))
 
         self.play_button = GameButton(
-            text="ИГРАТЬ · ВЫБОР КАРТЫ",
+            text=t("ИГРАТЬ · ВЫБОР КАРТЫ"),
             color=(0.22, 0.36, 0.66, 1),
             text_color=(0.94, 0.97, 1.0, 1),
             height=dp(56),
@@ -833,19 +1193,47 @@ class MenuScreen(Screen):
             height=dp(46) + dp(SAFE_BOTTOM),
             pos_hint={"x": 0, "y": 0},
         )
+        self.achievements_button = GameButton(
+            text=t("ДОСТИЖЕНИЯ"),
+            color=(0.24, 0.20, 0.10, 1),
+            text_color=(1.0, 0.90, 0.62, 1),
+            size_hint=(None, None),
+            width=dp(126),
+            height=dp(34),
+            radius=11,
+            font_size=sp(9.5),
+            pos_hint={"center_x": 0.17, "center_y": 0.5},
+        )
+        self.achievements_button.bind(on_release=self._open_achievements)
+        self.bottom_bar.add_widget(self.achievements_button)
+
         self.about_button = GameButton(
-            text="ОБ АВТОРЕ",
+            text=t("ОБ АВТОРЕ"),
             color=(0.17, 0.20, 0.25, 1),
             text_color=(0.84, 0.89, 0.94, 1),
             size_hint=(None, None),
-            width=dp(140),
+            width=dp(126),
             height=dp(34),
             radius=11,
-            font_size=sp(11),
+            font_size=sp(9.5),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
         )
         self.about_button.bind(on_release=self._open_info)
         self.bottom_bar.add_widget(self.about_button)
+
+        self.settings_button = GameButton(
+            text=t("НАСТРОЙКИ"),
+            color=(0.15, 0.24, 0.30, 1),
+            text_color=(0.84, 0.93, 1.0, 1),
+            size_hint=(None, None),
+            width=dp(126),
+            height=dp(34),
+            radius=11,
+            font_size=sp(9.5),
+            pos_hint={"center_x": 0.83, "center_y": 0.5},
+        )
+        self.settings_button.bind(on_release=self._open_settings)
+        self.bottom_bar.add_widget(self.settings_button)
         self.add_widget(self.bottom_bar)
 
         self.scroll.bind(size=self._fit_column)
@@ -855,6 +1243,30 @@ class MenuScreen(Screen):
         self.info.discord_button.bind(on_release=self._discord)
         self.info.close_button.bind(on_release=lambda *_a: self.info.close())
         self.add_widget(self.info)
+
+        self.settings = SettingsOverlay(
+            on_language=self._set_language,
+            on_music=self._toggle_music_setting,
+            on_quality=self._set_quality,
+            on_reset=self._reset_progress,
+            on_whats_new=self._open_whats_new,
+        )
+        self.settings.close_button.bind(
+            on_release=lambda *_a: self.settings.close()
+        )
+        self.add_widget(self.settings)
+
+        self.achievements = AchievementsOverlay()
+        self.achievements.close_button.bind(
+            on_release=lambda *_a: self.achievements.close()
+        )
+        self.add_widget(self.achievements)
+
+        self.whats_new = WhatsNewOverlay()
+        self.whats_new.close_button.bind(
+            on_release=lambda *_a: self.whats_new.close()
+        )
+        self.add_widget(self.whats_new)
 
         Clock.schedule_once(lambda _dt: self.refresh_menu(), 0)
 
@@ -891,12 +1303,16 @@ class MenuScreen(Screen):
 
     def refresh_menu(self) -> None:
         if not PROGRESS.tutorial_done and PROGRESS.unlocked <= 1:
-            self.progress_label.text = "СНАЧАЛА — КОРОТКОЕ ОБУЧЕНИЕ · 3 ВОЛНЫ"
+            self.progress_label.text = t(
+                "СНАЧАЛА — КОРОТКОЕ ОБУЧЕНИЕ · 3 ВОЛНЫ"
+            )
             return
         unlocked = max(1, min(len(LEVELS), PROGRESS.unlocked))
-        text = f"ОТКРЫТО КАРТ: {unlocked} ИЗ {len(LEVELS)}"
+        text = t("ОТКРЫТО КАРТ: {unlocked} ИЗ {total}").format(
+            unlocked=unlocked, total=len(LEVELS)
+        )
         if PROGRESS.tutorial_done:
-            text += "  ·  обучение пройдено"
+            text += t("  ·  обучение пройдено")
         self.progress_label.text = text
 
     def _continue(self, *_args) -> None:
@@ -923,12 +1339,57 @@ class MenuScreen(Screen):
     def _close_info(self, *_args) -> None:
         self.info.close()
 
+    def _open_achievements(self, *_args) -> None:
+        self.achievements.refresh()
+        self.achievements.open()
+
+    def _open_settings(self, *_args) -> None:
+        self.settings.refresh()
+        self.settings.open()
+
+    def _open_whats_new(self, *_args) -> None:
+        self.settings.close()
+        self.whats_new.open()
+
+    def _set_language(self, code: str) -> None:
+        if code == PROGRESS.language:
+            return
+        PROGRESS.set_language(code)
+        set_language(code)
+        # Экраны создают подписи один раз, поэтому их нужно пересобрать.
+        self.app_ref.rebuild_ui()
+
+    def _toggle_music_setting(self, *_args) -> None:
+        enabled = not PROGRESS.music
+        PROGRESS.set_music(enabled)
+        music.apply_settings(enabled)
+        self.settings.refresh()
+
+    def _set_quality(self, mode: str) -> None:
+        PROGRESS.set_quality(mode)
+        self.settings.refresh()
+        game = self.screen_manager.get_screen("game")
+        if game is not None:
+            game.arena.apply_quality()
+
+    def _reset_progress(self, *_args) -> None:
+        PROGRESS.reset()
+        self.settings.refresh()
+        self.refresh_menu()
+
+    def dispose(self) -> None:
+        if self._discord_timer is not None:
+            self._discord_timer.cancel()
+            self._discord_timer = None
+        self.settings._cancel_reset()
+        self.backdrop.dispose()
+
     def _discord(self, *_args) -> None:
         result = open_url(DISCORD_URL)
         messages = {
-            "opened": ("Ссылка открыта в браузере", (0.60, 0.94, 0.64, 1)),
-            "copied": ("Ссылка скопирована в буфер", (0.98, 0.86, 0.48, 1)),
-            "failed": ("Не удалось открыть ссылку", (1.0, 0.55, 0.48, 1)),
+            "opened": (t("Ссылка открыта в браузере"), (0.60, 0.94, 0.64, 1)),
+            "copied": (t("Ссылка скопирована в буфер"), (0.98, 0.86, 0.48, 1)),
+            "failed": (t("Не удалось открыть ссылку"), (1.0, 0.55, 0.48, 1)),
         }
         text, color = messages.get(result, messages["failed"])
         self.info.set_discord_status(text, color)
@@ -979,7 +1440,7 @@ class LevelsScreen(Screen):
             spacing=dp(10),
         )
         self.back_button = GameButton(
-            text="НАЗАД",
+            text=t("НАЗАД"),
             color=(0.18, 0.22, 0.28, 1),
             text_color=(0.88, 0.93, 0.98, 1),
             size_hint=(None, None),
@@ -991,7 +1452,7 @@ class LevelsScreen(Screen):
         top.add_widget(self.back_button)
 
         title = Label(
-            text="ВЫБОР КАРТЫ",
+            text=t("ВЫБОР КАРТЫ"),
             font_size=sp(20),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
@@ -1005,7 +1466,7 @@ class LevelsScreen(Screen):
 
         # ---------------------------------------------------------- обучение
         self.tutorial_button = GameButton(
-            text="ОБУЧЕНИЕ · короткая карта\nдвижение · золото · первая башня",
+            text=t("ОБУЧЕНИЕ · короткая карта\nдвижение · золото · первая башня"),
             color=(0.14, 0.42, 0.34, 1),
             text_color=(0.92, 1.0, 0.95, 1),
             height=dp(72),
@@ -1031,7 +1492,7 @@ class LevelsScreen(Screen):
             spacing=dp(6),
         )
         header_title = Label(
-            text="КАРТЫ",
+            text=t("КАРТЫ"),
             font_size=sp(11),
             bold=True,
             color=(1.0, 0.84, 0.40, 1),
@@ -1097,18 +1558,20 @@ class LevelsScreen(Screen):
 
     def refresh_levels(self) -> None:
         unlocked = max(1, min(len(LEVELS), PROGRESS.unlocked))
-        self.summary.text = f"ОТКРЫТО {unlocked} ИЗ {len(LEVELS)}"
+        self.summary.text = t("ОТКРЫТО {unlocked} ИЗ {total}").format(
+            unlocked=unlocked, total=len(LEVELS)
+        )
         for index, (level, tile) in enumerate(zip(LEVELS, self.level_buttons)):
             available = PROGRESS.is_unlocked(index)
             stars = PROGRESS.stars(level.id) if available else 0
             best_wave = PROGRESS.best_wave(level.id) if available else 0
             tile.set_data(available, stars, best_wave)
         if PROGRESS.tutorial_done:
-            self.tutorial_button.text = (
+            self.tutorial_button.text = t(
                 "ОБУЧЕНИЕ · пройдено\nможно повторить в любой момент"
             )
         else:
-            self.tutorial_button.text = (
+            self.tutorial_button.text = t(
                 "ОБУЧЕНИЕ · короткая карта\n"
                 "движение · золото · первая башня"
             )
@@ -1141,7 +1604,7 @@ class PauseOverlay(Overlay):
             spacing=dp(12),
         )
         title = Label(
-            text="ПАУЗА",
+            text=t("ПАУЗА"),
             font_size=sp(26),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
@@ -1153,9 +1616,9 @@ class PauseOverlay(Overlay):
         title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         box.add_widget(title)
 
-        self.continue_button = GameButton("ПРОДОЛЖИТЬ", color=(0.16, 0.55, 0.30, 1))
-        self.restart_button = GameButton("ЗАНОВО", color=(0.36, 0.30, 0.12, 1))
-        self.menu_button = GameButton("В МЕНЮ", color=(0.30, 0.13, 0.12, 1))
+        self.continue_button = GameButton(t("ПРОДОЛЖИТЬ"), color=(0.16, 0.55, 0.30, 1))
+        self.restart_button = GameButton(t("ЗАНОВО"), color=(0.36, 0.30, 0.12, 1))
+        self.menu_button = GameButton(t("В МЕНЮ"), color=(0.30, 0.13, 0.12, 1))
         for button in (
             self.continue_button,
             self.restart_button,
@@ -1183,7 +1646,7 @@ class UpgradeOverlay(Overlay):
             spacing=dp(6),
         )
         self.title = Label(
-            text="УЛУЧШЕНИЯ",
+            text=t("УЛУЧШЕНИЯ"),
             font_size=sp(23),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
@@ -1222,7 +1685,7 @@ class UpgradeOverlay(Overlay):
             self.buttons[key] = button
 
         self.close_button = GameButton(
-            "ЗАКРЫТЬ",
+            t("ЗАКРЫТЬ"),
             color=(0.22, 0.24, 0.28, 1),
             height=dp(46),
             radius=12,
@@ -1240,16 +1703,21 @@ class UpgradeOverlay(Overlay):
     def refresh(self) -> None:
         if self.arena is None:
             return
-        self.gold_label.text = f"Золото: {int(self.arena.gold)}"
+        self.gold_label.text = t("Золото: {gold}").format(gold=int(self.arena.gold))
         for key, button in self.buttons.items():
             data = GLOBAL_UPGRADES[key]
             level = self.arena.upgrades.get(key, 0)
             maxed = self.arena.upgrade_maxed(key)
             cost = self.arena.upgrade_cost(key)
-            price = "макс." if maxed else f"{cost} з."
-            button.text = (
-                f"{data['name']}  ур. {level}/{data['max_level']}\n"
-                f"{data['desc']} · {price}"
+            price = t("макс.") if maxed else t("{cost} з.").format(cost=cost)
+            button.text = t(
+                "{name}  ур. {level}/{max}\n{desc} · {price}"
+            ).format(
+                name=t(data["name"]),
+                level=level,
+                max=data["max_level"],
+                desc=t(data["desc"]),
+                price=price,
             )
             button.disabled = maxed or self.arena.gold < cost
 
@@ -1278,7 +1746,7 @@ class ShopOverlay(Overlay):
             spacing=dp(6),
         )
         title = Label(
-            text="МАГАЗИН",
+            text=t("МАГАЗИН"),
             font_size=sp(23),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
@@ -1317,7 +1785,7 @@ class ShopOverlay(Overlay):
             self.buttons[key] = button
 
         self.close_button = GameButton(
-            "ЗАКРЫТЬ",
+            t("ЗАКРЫТЬ"),
             color=(0.22, 0.24, 0.28, 1),
             height=dp(46),
             radius=12,
@@ -1335,10 +1803,12 @@ class ShopOverlay(Overlay):
     def refresh(self) -> None:
         if self.arena is None:
             return
-        self.gold_label.text = f"Золото: {int(self.arena.gold)}"
+        self.gold_label.text = t("Золото: {gold}").format(gold=int(self.arena.gold))
         for key, button in self.buttons.items():
             data = SHOP_ITEMS[key]
-            button.text = f"{data['name']} · {data['cost']} з.\n{data['desc']}"
+            button.text = t("{name} · {cost} з.\n{desc}").format(
+                name=t(data["name"]), cost=data["cost"], desc=t(data["desc"])
+            )
             allowed, _reason = self.arena.item_available(key)
             button.disabled = not allowed
 
@@ -1420,7 +1890,7 @@ class BuildingOverlay(Overlay):
         box.add_widget(self.next_label)
 
         self.upgrade_button = GameButton(
-            "УЛУЧШИТЬ",
+            t("УЛУЧШИТЬ"),
             color=(0.16, 0.48, 0.30, 1),
             height=dp(50),
             radius=12,
@@ -1430,7 +1900,7 @@ class BuildingOverlay(Overlay):
         box.add_widget(self.upgrade_button)
 
         self.sell_button = GameButton(
-            "ПРОДАТЬ",
+            t("ПРОДАТЬ"),
             color=(0.38, 0.20, 0.14, 1),
             text_color=(1.0, 0.88, 0.80, 1),
             height=dp(42),
@@ -1441,7 +1911,7 @@ class BuildingOverlay(Overlay):
         box.add_widget(self.sell_button)
 
         self.close_button = GameButton(
-            "ЗАКРЫТЬ",
+            t("ЗАКРЫТЬ"),
             color=(0.22, 0.24, 0.28, 1),
             height=dp(42),
             radius=12,
@@ -1462,21 +1932,25 @@ class BuildingOverlay(Overlay):
             return
         if info is None:
             info = self.arena.building_info(self.building)
-        self.title.text = f"{info['name'].upper()} · ур. {info['level']}"
-        self.hp_label.text = (
-            f"Прочность {int(info['hp'])} / {int(info['max_hp'])}"
+        self.title.text = t("{name} · ур. {level}").format(
+            name=t(info["name"]).upper(), level=info["level"]
+        )
+        self.hp_label.text = t("Прочность {hp} / {max}").format(
+            hp=int(info["hp"]), max=int(info["max_hp"])
         )
         self.effect_label.text = info["effect"]
         if info["maxed"]:
-            self.next_label.text = "Максимальный уровень"
-            self.upgrade_button.text = "МАКС."
+            self.next_label.text = t("Максимальный уровень")
+            self.upgrade_button.text = t("МАКС.")
             self.upgrade_button.disabled = True
         else:
             self.next_label.text = info["next"]
-            self.upgrade_button.text = f"УЛУЧШИТЬ · {info['cost']} з."
+            self.upgrade_button.text = t("УЛУЧШИТЬ · {cost} з.").format(
+                cost=info["cost"]
+            )
             self.upgrade_button.disabled = self.arena.gold < info["cost"]
         refund = self.arena.building_refund(self.building)
-        self.sell_button.text = f"ПРОДАТЬ · +{refund} з."
+        self.sell_button.text = t("ПРОДАТЬ · +{refund} з.").format(refund=refund)
         self.sell_button.disabled = self.arena.ended
 
     def _sell(self) -> None:
@@ -1571,37 +2045,67 @@ class EndOverlay(Overlay):
         self.stats_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         box.add_widget(self.stats_label)
 
-        self.again_button = GameButton("ИГРАТЬ СНОВА", color=(0.16, 0.55, 0.30, 1))
-        self.menu_button = GameButton("К ВЫБОРУ КАРТЫ", color=(0.30, 0.13, 0.12, 1))
+        self.achievements_label = Label(
+            text="",
+            font_size=sp(11),
+            bold=True,
+            color=(1.0, 0.86, 0.44, 1),
+            size_hint_y=None,
+            height=dp(44),
+            halign="center",
+            valign="middle",
+        )
+        self.achievements_label.bind(
+            size=lambda w, _v: setattr(w, "text_size", w.size)
+        )
+        box.add_widget(self.achievements_label)
+
+        self.again_button = GameButton(t("ИГРАТЬ СНОВА"), color=(0.16, 0.55, 0.30, 1))
+        self.menu_button = GameButton(t("К ВЫБОРУ КАРТЫ"), color=(0.30, 0.13, 0.12, 1))
         box.add_widget(self.again_button)
         box.add_widget(self.menu_button)
 
         self.add_panel(box)
 
     def open(self, win: bool, stats: dict, stars: int = 0,
-             unlock_name: str = "", level_name: str = "") -> None:
+             unlock_name: str = "", level_name: str = "",
+             achievements: list | None = None) -> None:
         total = int(stats.get("total_waves", TOTAL_WAVES))
         wave = int(stats.get("wave", 1))
         waves = total if win else max(0, wave - 1)
-        self.title.text = "БАЗА ВЫСТОЯЛА!" if win else "БАЗА ПАЛА"
+        self.title.text = t("БАЗА ВЫСТОЯЛА!") if win else t("БАЗА ПАЛА")
         self.title.color = (
             (1.0, 0.84, 0.35, 1) if win else (1.0, 0.48, 0.42, 1)
         )
         self.level_label.text = level_name
         if win:
-            self.stars_label.text = f"ЗВЁЗДЫ: {stars} / 3"
+            self.stars_label.text = t("ЗВЁЗДЫ: {stars} / 3").format(stars=stars)
             self.stars_label.color = (1.0, 0.82, 0.28, 1)
         else:
-            self.stars_label.text = "ЗВЁЗДЫ: 0 / 3"
+            self.stars_label.text = t("ЗВЁЗДЫ: {stars} / 3").format(stars=0)
             self.stars_label.color = (0.58, 0.64, 0.58, 1)
         self.unlock_label.text = (
-            f"Открыта новая карта: {unlock_name}!" if unlock_name else ""
+            t("Открыта новая карта: {name}!").format(name=t(unlock_name))
+            if unlock_name
+            else ""
         )
-        self.stats_label.text = (
-            f"Отбито волн: {waves} / {total}\n"
-            f"Добыто золота: {int(stats.get('gold_earned', 0))} · "
-            f"Побед: {int(stats.get('kills', 0))}\n"
-            f"Построек осталось: {int(stats.get('buildings', 0))}"
+        if achievements:
+            names = ", ".join(t(item["name"]) for item in achievements)
+            self.achievements_label.text = t("Достижения: {names}").format(
+                names=names
+            )
+        else:
+            self.achievements_label.text = ""
+        self.stats_label.text = t(
+            "Отбито волн: {waves} / {total}\n"
+            "Добыто золота: {gold} · Побед: {kills}\n"
+            "Построек осталось: {buildings}"
+        ).format(
+            waves=waves,
+            total=total,
+            gold=int(stats.get("gold_earned", 0)),
+            kills=int(stats.get("kills", 0)),
+            buildings=int(stats.get("buildings", 0)),
         )
         self.visible = True
 
@@ -1693,7 +2197,7 @@ class GameScreen(Screen):
         music.apply_settings(PROGRESS.music)
         music.play(THEME_BY_LEVEL.get(level.id, MENU_THEME))
         self._sync_hud()
-        self.toast.show(f"{level.name}: {level.desc}", "gold", 3.8)
+        self.toast.show(t("{name}: {desc}").format(name=t(level.name), desc=t(level.desc)), "gold", 3.8)
         if level.tutorial:
             self._schedule_hints()
 
@@ -1713,7 +2217,7 @@ class GameScreen(Screen):
         self._cancel_hints()
         for step, text in enumerate(TUTORIAL_HINTS):
             event = Clock.schedule_once(
-                lambda _dt, t=text: self.toast.show(t, "blue", 3.0),
+                lambda _dt, hint=text: self.toast.show(t(hint), "blue", 3.0),
                 4.2 + step * 5.8,
             )
             self._hint_events.append(event)
@@ -1739,26 +2243,39 @@ class GameScreen(Screen):
         waves = total if win else max(0, int(stats.get("wave", 1)) - 1)
         if level.tutorial:
             self._cancel_hints()
-            self.end.open(win, stats, 3 if win else 0, "", level.name)
             if win:
                 PROGRESS.mark_tutorial_done()
                 self._tutorial_finished = True
-                self.end.title.text = "ОБУЧЕНИЕ ПРОЙДЕНО!"
-                self.end.unlock_label.text = "Дальше — первая настоящая карта"
-                self.end.again_button.text = "НАЧАТЬ ДОЛИНУ"
+            run = dict(stats)
+            run["win"] = win
+            run["waves"] = waves
+            PROGRESS.add_run(run)
+            new_achievements = check_achievements(PROGRESS, run)
+            self.end.open(win, stats, 3 if win else 0, "", t(level.name), new_achievements)
+            if win:
+                self.end.title.text = t("ОБУЧЕНИЕ ПРОЙДЕНО!")
+                self.end.unlock_label.text = t("Дальше — первая настоящая карта")
+                self.end.again_button.text = t("НАЧАТЬ ДОЛИНУ")
             else:
-                self.end.title.text = "ПОПРОБУЙ ЕЩЁ"
-                self.end.again_button.text = "ПОВТОРИТЬ ОБУЧЕНИЕ"
+                self.end.title.text = t("ПОПРОБУЙ ЕЩЁ")
+                self.end.again_button.text = t("ПОВТОРИТЬ ОБУЧЕНИЕ")
             return
-        self.end.again_button.text = "ИГРАТЬ СНОВА"
         ratio = self.arena.base_hp / max(1.0, self.arena.base_max_hp)
         stars, newly_unlocked = PROGRESS.record(
             index, level.id, win, waves, ratio, total
         )
+        run = dict(stats)
+        run["win"] = win
+        run["waves"] = waves
+        PROGRESS.add_run(run)
+        new_achievements = check_achievements(PROGRESS, run)
+        self.end.again_button.text = t("ИГРАТЬ СНОВА")
         unlock_name = ""
         if newly_unlocked and index + 1 < len(LEVELS):
             unlock_name = LEVELS[index + 1].name
-        self.end.open(win, stats, stars, unlock_name, level.name)
+        self.end.open(
+            win, stats, stars, unlock_name, t(level.name), new_achievements
+        )
 
     def _on_building(self, building, info: dict) -> None:
         if self.arena.ended:
@@ -1867,7 +2384,9 @@ class GameScreen(Screen):
         self.build_bar.set_state(self.arena.stats(), mode)
         if mode:
             self.toast.show(
-                f"{mode.upper()}: нажми на свободную площадку",
+                t("{name}: нажми на свободную площадку").format(
+                    name=t(BUILD_TYPES[mode]["name"]).upper()
+                ),
                 "blue",
                 1.8,
             )
@@ -1937,7 +2456,7 @@ class GameScreen(Screen):
         self.arena.start_new()
         self.arena.resume()
         self._sync_hud()
-        self.toast.show("Новая оборона началась", "gold", 2.0)
+        self.toast.show(t("Новая оборона началась"), "gold", 2.0)
 
     def _to_levels(self, *_args) -> None:
         self._close_all()
@@ -1948,3 +2467,15 @@ class GameScreen(Screen):
         self._close_all()
         self.arena.stop()
         self.screen_manager.current = "menu"
+
+    def dispose(self) -> None:
+        event = getattr(self, "_sync", None)
+        if event is not None:
+            event.cancel()
+            self._sync = None
+        try:
+            Window.unbind(on_key_down=self._on_key_down)
+        except Exception:
+            pass
+        self._cancel_hints()
+        self.arena.dispose()

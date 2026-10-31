@@ -31,17 +31,45 @@ from kivy.app import App
 from kivy.core.window import Window
 from kivy.uix.screenmanager import FadeTransition, ScreenManager
 
+from game.core.i18n import set_language
+from game.core.progress import PROGRESS
 from game.ui.screens import GameScreen, LevelsScreen, MenuScreen
 
 
 class GoldRaidApp(App):
-    def build(self):
-        manager = ScreenManager(transition=FadeTransition(duration=0.18))
+    def _build_screens(self, manager) -> None:
         manager.add_widget(MenuScreen(self, manager))
         manager.add_widget(LevelsScreen(self, manager))
         manager.add_widget(GameScreen(self, manager))
+
+    def build(self):
+        # Язык нужен до создания экранов: подписи переводятся один раз.
+        set_language(PROGRESS.language)
+        manager = ScreenManager(transition=FadeTransition(duration=0.18))
+        self._build_screens(manager)
         manager.current = "menu"
         return manager
+
+    def rebuild_ui(self) -> None:
+        """Пересобирает экраны заново (после смены языка).
+
+        Правит существующий ScreenManager, чтобы ``app.root`` остался тем же
+        объектом: на него завязаны переходы и внешние тесты.
+        """
+        manager = self.root
+        if manager is None:
+            return
+        current = manager.current
+        for screen in list(manager.screens):
+            dispose = getattr(screen, "dispose", None)
+            if callable(dispose):
+                try:
+                    dispose()
+                except Exception:
+                    pass
+            manager.remove_widget(screen)
+        self._build_screens(manager)
+        manager.current = current
 
     def on_start(self) -> None:
         Window.clearcolor = (0.02, 0.06, 0.04, 1)

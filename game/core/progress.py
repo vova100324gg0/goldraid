@@ -1,4 +1,4 @@
-"""Сохранение прогресса: открытые карты и лучшие результаты."""
+"""Сохранение прогресса: карты, настройки, достижения и счётчики."""
 
 from __future__ import annotations
 
@@ -7,6 +7,19 @@ import os
 from pathlib import Path
 
 from ..world.levels import LEVELS
+
+# Версия формата сохранения. При изменении структуры старые файлы
+# дочитываются значениями по умолчанию, а не теряются.
+SAVE_VERSION = 2
+
+DEFAULT_COUNTERS = {
+    "runs": 0,
+    "wins": 0,
+    "bosses": 0,
+    "buildings": 0,
+    "gold": 0,
+    "waves": 0,
+}
 
 
 def _storage_path() -> Path:
@@ -24,14 +37,20 @@ def _storage_path() -> Path:
 
 
 class Progress:
-    """Открытые уровни, звёзды и лучшая волна по каждой карте."""
+    """Открытые уровни, настройки, достижения и лучшие результаты."""
 
     def __init__(self, path: Path | None = None):
         self.path = path or _storage_path()
+        self.version = SAVE_VERSION
         self.unlocked = 1
         self.best: dict[str, dict] = {}
         self.tutorial_done = False
         self.music = True
+        self.language = "ru"
+        self.quality = "auto"
+        self.achievements: dict[str, bool] = {}
+        self.seen_version = ""
+        self.counters = dict(DEFAULT_COUNTERS)
         self.load()
 
     # ------------------------------------------------------------------
@@ -55,15 +74,46 @@ class Progress:
             }
         self.tutorial_done = bool(raw.get("tutorial_done", False))
         self.music = bool(raw.get("music", True))
+        self.language = str(raw.get("language", "ru"))
+        if self.language not in ("ru", "en"):
+            self.language = "ru"
+        self.quality = str(raw.get("quality", "auto"))
+        if self.quality not in ("auto", "high", "low"):
+            self.quality = "auto"
+        achievements = raw.get("achievements")
+        if isinstance(achievements, dict):
+            self.achievements = {
+                str(key): bool(value) for key, value in achievements.items()
+            }
+        self.seen_version = str(raw.get("seen_version", ""))
+        counters = raw.get("counters")
+        if isinstance(counters, dict):
+            for key, value in DEFAULT_COUNTERS.items():
+                try:
+                    self.counters[key] = max(0, int(counters.get(key, value)))
+                except (TypeError, ValueError):
+                    self.counters[key] = value
+        # Старый файл без версии — просто миграция: все поля уже с
+        # значениями по умолчанию, а прогресс карт сохранён.
+        try:
+            self.version = max(SAVE_VERSION, int(raw.get("version", 1)))
+        except (TypeError, ValueError):
+            self.version = SAVE_VERSION
 
     def save(self) -> None:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
+                "version": SAVE_VERSION,
                 "unlocked": self.unlocked,
                 "best": self.best,
                 "tutorial_done": self.tutorial_done,
                 "music": self.music,
+                "language": self.language,
+                "quality": self.quality,
+                "achievements": self.achievements,
+                "seen_version": self.seen_version,
+                "counters": dict(self.counters),
             }
             self.path.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2),
@@ -73,6 +123,7 @@ class Progress:
             # Прогресс не критичен для игры: молча живём без сохранения.
             pass
 
+    # ------------------------------------------------------------------
     def mark_tutorial_done(self) -> None:
         if not self.tutorial_done:
             self.tutorial_done = True
@@ -84,6 +135,25 @@ class Progress:
             self.music = enabled
             self.save()
 
+    def set_language(self, code: str) -> str:
+        code = code if code in ("ru", "en") else "ru"
+        if code != self.language:
+            self.language = code
+            self.save()
+        return self.language
+
+    def set_quality(self, mode: str) -> str:
+        mode = mode if mode in ("auto", "high", "low") else "auto"
+        if mode != self.quality:
+            self.quality = mode
+            self.save()
+        return self.quality
+
+    def mark_seen(self, version: str) -> None:
+        if version and self.seen_version != version:
+            self.seen_version = version
+            self.save()
+
     # ------------------------------------------------------------------
     def is_unlocked(self, index: int) -> bool:
         return index < self.unlocked
@@ -93,6 +163,28 @@ class Progress:
 
     def best_wave(self, level_id: str) -> int:
         return int(self.best.get(level_id, {}).get("wave", 0))
+
+    def has_achievement(self, key: str) -> bool:
+        return bool(self.achievements.get(key, False))
+
+    def unlock_achievement(self, key: str) -> bool:
+        """Открывает достижение. Возвращает True, если оно новое."""
+        if self.achievements.get(key):
+            return False
+        self.achievements[key] = True
+        self.save()
+        return True
+
+    def add_run(self, run: dict) -> None:
+        """Учитывает завершённый бой в общих счётчиках."""
+        self.counters["runs"] += 1
+        if run.get("win"):
+            self.counters["wins"] += 1
+        self.counters["bosses"] += max(0, int(run.get("bosses_killed", 0)))
+        self.counters["buildings"] += max(0, int(run.get("buildings_built", 0)))
+        self.counters["gold"] += max(0, int(run.get("gold_earned", 0)))
+        self.counters["waves"] += max(0, int(run.get("waves", 0)))
+        self.save()
 
     def record(
         self,
@@ -123,6 +215,18 @@ class Progress:
             newly_unlocked = True
         self.save()
         return stars, newly_unlocked
+
+    # ------------------------------------------------------------------
+    def reset(self) -> None:
+        """Сбрасывает прогресс, сохраняя язык, музыку и качество графики."""
+        self.unlocked = 1
+        self.best = {}
+        self.tutorial_done = False
+        self.achievements = {}
+        self.seen_version = ""
+        self.counters = dict(DEFAULT_COUNTERS)
+        self.version = SAVE_VERSION
+        self.save()
 
 
 PROGRESS = Progress()
