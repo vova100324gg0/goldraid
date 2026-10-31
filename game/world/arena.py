@@ -14,7 +14,7 @@ from kivy.metrics import dp
 from kivy.uix.widget import Widget
 
 from .background import build_background
-from .config import (
+from ..core.config import (
     BUILD_TYPES,
     CALL_WAVE_BONUS_BASE,
     CALL_WAVE_BONUS_PER_SECOND,
@@ -35,7 +35,7 @@ from .config import (
     WAVE_REWARD,
     WAVE_REWARD_STEP,
 )
-from .entities import (
+from ..entities.entities import (
     Building,
     Coin,
     Defender,
@@ -46,9 +46,9 @@ from .entities import (
     make_enemy,
 )
 from .levels import LEVELS, Level
-from .renderer import draw_arena
-from .sprites import draw_building, draw_castle, draw_slot, draw_spawn_marker
-from .util import clamp, dist, normalize
+from ..render.renderer import draw_arena
+from ..render.sprites import draw_building, draw_castle, draw_slot, draw_spawn_marker
+from ..core.util import clamp, dist, normalize
 
 _KEYMAP = {
     119: "w", 87: "w", 1094: "w", 1062: "w",
@@ -125,10 +125,14 @@ class Arena(Widget):
     def _rebuild_background(self) -> None:
         self.bg_group.clear()
         self.bg_translate = Translate(0, 0)
+        # Если мир уже двигался, сохраняем смещение камеры — иначе фон
+        # мигнёт на один кадр после пересборки.
+        self.bg_translate.x = getattr(self, "shake_x", 0.0) - getattr(self, "cam_x", 0.0)
+        self.bg_translate.y = getattr(self, "shake_y", 0.0) - getattr(self, "cam_y", 0.0)
         self.bg_group.add(PushMatrix())
         self.bg_group.add(Scale(dp(1), dp(1), 1))
         self.bg_group.add(self.bg_translate)
-        build_background(self.bg_group, self.level)
+        build_background(self.bg_group, self.level, detail=not self.low_detail)
         self.bg_group.add(PopMatrix())
 
     def _reset_state(self) -> None:
@@ -1506,6 +1510,10 @@ class Arena(Widget):
         if not self.low_detail and self.frame_ms > 13.0:
             self.low_detail = True
             self._quality_frames = 0
+            # Фон — самая тяжёлая часть сцены: в упрощённом режиме
+            # убираем поля, лагеря и мелкий сор, оставляя рельеф и дороги.
+            self._rebuild_background()
         elif self.low_detail and self.frame_ms < 6.5:
             self.low_detail = False
             self._quality_frames = 0
+            self._rebuild_background()

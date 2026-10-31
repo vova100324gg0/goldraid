@@ -7,7 +7,7 @@ import math
 from kivy.graphics import Color, PopMatrix, PushMatrix, Rotate, Translate
 from kivy.metrics import dp
 
-from .config import (
+from ..core.config import (
     BASE_POS,
     BLACK,
     BLUE,
@@ -35,7 +35,7 @@ from .config import (
     WOOD,
     WOOD_LIGHT,
 )
-from .entities import (
+from ..entities.entities import (
     Building,
     Coin,
     Defender,

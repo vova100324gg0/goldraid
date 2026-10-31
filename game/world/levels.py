@@ -32,6 +32,11 @@ class Level:
     first_delay: float = 22.0
     wave_pause: float = 13.0
     landmarks: list[tuple[float, float]] = field(default_factory=list)
+    # Сколько «дикой» земли добавить по бокам (x) и в длину (y).
+    # Карта перестаёт упираться в стену сразу за базой и дорогами.
+    expand: tuple[float, float] = (0.0, 0.0)
+    # Обучающая карта: короткая, с подсказками, ведёт на первую настоящую карту.
+    tutorial: bool = False
 
 
 LEVELS: list[Level] = [
@@ -82,6 +87,7 @@ LEVELS: list[Level] = [
         seed=20261027,
         trees=28,
         accent=(0.16, 0.55, 0.30, 1),
+        expand=(320.0, 480.0),
     ),
     Level(
         id="pass",
@@ -133,6 +139,7 @@ LEVELS: list[Level] = [
         seed=771203,
         trees=22,
         accent=(0.36, 0.34, 0.42, 1),
+        expand=(330.0, 520.0),
     ),
     Level(
         id="ash",
@@ -188,6 +195,7 @@ LEVELS: list[Level] = [
         seed=991187,
         trees=12,
         accent=(0.52, 0.26, 0.16, 1),
+        expand=(360.0, 560.0),
     ),
     Level(
         id="forest",
@@ -243,6 +251,7 @@ LEVELS: list[Level] = [
         seed=481516,
         trees=64,
         accent=(0.20, 0.50, 0.24, 1),
+        expand=(340.0, 520.0),
     ),
     Level(
         id="frost",
@@ -294,6 +303,7 @@ LEVELS: list[Level] = [
         trees=14,
         accent=(0.44, 0.64, 0.82, 1),
         first_delay=18.0,
+        expand=(330.0, 540.0),
     ),
     Level(
         id="crater",
@@ -358,7 +368,84 @@ LEVELS: list[Level] = [
         accent=(0.85, 0.36, 0.16, 1),
         first_delay=20.0,
         wave_pause=11.5,
+        expand=(380.0, 600.0),
     ),
+]
+
+
+def _expand(level: Level) -> None:
+    """Раздвигает мир карты: добавляет землю по бокам и в длину.
+
+    Координаты базы, площадок, дорог и золота сдвигаются вместе с миром,
+    поэтому баланс не меняется — исчезает только «стена» у края карты.
+    """
+    mx, my = level.expand
+    if not mx and not my:
+        return
+    level.world_w += mx * 2.0
+    level.world_h += my * 2.0
+    level.base_pos = (level.base_pos[0] + mx, level.base_pos[1] + my)
+    level.slots = [(x + mx, y + my) for x, y in level.slots]
+    level.routes = [[(x + mx, y + my) for x, y in route] for route in level.routes]
+    level.gold_spots = [(x + mx, y + my) for x, y in level.gold_spots]
+
+
+for _level in LEVELS:
+    _expand(_level)
+
+
+# Короткая обучающая карта. Не входит в список LEVELS: после победы
+# сразу ведёт на первую настоящую карту.
+TUTORIAL = Level(
+    id="tutorial",
+    name="Обучение",
+    subtitle="Первые шаги защитника",
+    desc="Короткая тренировка: движение, золото, первая башня и первая волна.",
+    world_w=1150.0,
+    world_h=1500.0,
+    base_pos=(575.0, 1270.0),
+    slots=[
+        (455.0, 1180.0), (575.0, 1205.0), (695.0, 1180.0),
+        (410.0, 1075.0), (575.0, 1095.0), (740.0, 1075.0),
+        (490.0, 975.0), (660.0, 975.0), (575.0, 890.0),
+    ],
+    routes=[
+        [
+            (575.0, 60.0), (560.0, 260.0), (590.0, 470.0),
+            (575.0, 700.0), (575.0, 930.0), (575.0, 1100.0), (575.0, 1210.0),
+        ],
+        [
+            (80.0, 640.0), (230.0, 710.0), (350.0, 880.0),
+            (455.0, 1060.0), (540.0, 1175.0), (575.0, 1210.0),
+        ],
+    ],
+    gold_spots=[
+        (575.0, 820.0), (420.0, 700.0), (730.0, 700.0),
+        (300.0, 950.0), (850.0, 950.0), (575.0, 480.0),
+        (330.0, 1180.0), (820.0, 1180.0),
+    ],
+    waves=3,
+    difficulty=0.55,
+    start_gold=260,
+    base_hp=520,
+    ground=(0.44, 0.73, 0.42, 1),
+    ground_dark=(0.35, 0.62, 0.35, 1),
+    ground_light=(0.52, 0.81, 0.48, 1),
+    seed=20260101,
+    trees=20,
+    accent=(0.32, 0.72, 0.46, 1),
+    first_delay=30.0,
+    wave_pause=22.0,
+    tutorial=True,
+)
+
+# Пять подсказок обучения: показываются по очереди в начале боя.
+TUTORIAL_HINTS: list[str] = [
+    "Тяни палец по полю — герой идёт за ним",
+    "Наступай на золотые монеты, чтобы собирать золото",
+    "Выбери БАШНЮ внизу и нажми на свободную площадку",
+    "Кнопка ВОЛНА вызовет врагов раньше — за это дают золото",
+    "Не дай врагам снести ворота — и ты готов к настоящим картам!",
 ]
 
 

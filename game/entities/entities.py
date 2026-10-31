@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 
-from .config import ENEMY_TYPES, GOLD
+from ..core.config import ENEMY_TYPES, GOLD
 
 
 @dataclass

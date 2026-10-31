@@ -65,6 +65,7 @@ Write-Host "Собираю приложение (2-3 минуты)..." -Foregrou
 & $Python -m PyInstaller --noconfirm --clean --windowed --onedir --name GoldRaid `
     --distpath "$DistDir" --workpath "$WorkDir" --specpath "$OutDir" `
     --collect-all kivy_deps `
+    --add-data "$Root\game\assets;game\assets" `
     --runtime-hook "$Hook" `
     --icon "$Root\icon.png" `
     --paths "$Root" `

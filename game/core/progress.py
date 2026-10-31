@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from .levels import LEVELS
+from ..world.levels import LEVELS
 
 
 def _storage_path() -> Path:
@@ -30,6 +30,8 @@ class Progress:
         self.path = path or _storage_path()
         self.unlocked = 1
         self.best: dict[str, dict] = {}
+        self.tutorial_done = False
+        self.music = True
         self.load()
 
     # ------------------------------------------------------------------
@@ -51,11 +53,18 @@ class Progress:
                 for key, value in best.items()
                 if isinstance(value, dict)
             }
+        self.tutorial_done = bool(raw.get("tutorial_done", False))
+        self.music = bool(raw.get("music", True))
 
     def save(self) -> None:
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {"unlocked": self.unlocked, "best": self.best}
+            payload = {
+                "unlocked": self.unlocked,
+                "best": self.best,
+                "tutorial_done": self.tutorial_done,
+                "music": self.music,
+            }
             self.path.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2),
                 encoding="utf-8",
@@ -63,6 +72,17 @@ class Progress:
         except Exception:
             # Прогресс не критичен для игры: молча живём без сохранения.
             pass
+
+    def mark_tutorial_done(self) -> None:
+        if not self.tutorial_done:
+            self.tutorial_done = True
+            self.save()
+
+    def set_music(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled != self.music:
+            self.music = enabled
+            self.save()
 
     # ------------------------------------------------------------------
     def is_unlocked(self, index: int) -> bool:

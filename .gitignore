@@ -21,3 +21,6 @@ desktop.ini
 
 # Личный адрес телевизора для tv-adb.cmd
 tv-ip.txt
+
+# Отчёты автотестов
+*_report.txt

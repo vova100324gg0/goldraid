@@ -16,8 +16,9 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
-from .config import BUILD_TYPES, SAFE_BOTTOM, SAFE_SIDE, SAFE_TOP, TOTAL_WAVES
-from .gfx import star
+from ..core.config import BUILD_TYPES, SAFE_BOTTOM, SAFE_SIDE, SAFE_TOP, TOTAL_WAVES
+from ..render.gfx import star
+from ..render.icons import draw_icon
 
 
 def _set_text(label: Label, text: str) -> None:
@@ -48,7 +49,11 @@ class GameButton(Button):
         **kwargs,
     ):
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", dp(58))
+        # Высоту задаём только если её не задали явно и не передали size:
+        # иначе setdefault перетирал height и кнопки с size=(...) вытягивались
+        # по вертикали (например, круглые кнопки HUD становились 46x58).
+        if "height" not in kwargs and "size" not in kwargs:
+            kwargs.setdefault("height", dp(58))
         super().__init__(
             text=text,
             bold=True,
@@ -60,6 +65,10 @@ class GameButton(Button):
             disabled_color=(text_color[0], text_color[1], text_color[2], 0.55),
             outline_color=(0, 0, 0, 0.42),
             outline_width=dp(0.8),
+            # У Button в Kivy по умолчанию halign='auto', valign='bottom':
+            # подпись «прилипала» к нижнему левому углу. Центрируем явно.
+            halign="center",
+            valign="middle",
             **kwargs,
         )
         self.bg = list(color)
@@ -148,6 +157,7 @@ class GameButton(Button):
             max(0, self.height - pad * 2),
             max(dp(2), radius - pad),
         )
+        self.text_size = self.size
 
     def set_active(self, active: bool) -> None:
         self._active = bool(active)
@@ -186,9 +196,11 @@ class StarRow(Widget):
             return
         step = self.width / self.total
         radius = min(step * 0.42, self.height * 0.5)
+        # center_y/center_x в Kivy кэшируются и внутри наблюдателя свойства
+        # могут отдать ещё старое значение — считаем центр напрямую.
+        cy = self.y + self.height * 0.5
         for index in range(int(self.total)):
             cx = self.x + step * (index + 0.5)
-            cy = self.center_y
             filled = index < self.count
             color = (
                 (1.0, 0.84, 0.30, 1)
@@ -198,54 +210,102 @@ class StarRow(Widget):
             star(self._group, cx, cy, radius, color, radius * 0.46)
 
 
-class StatChip(BoxLayout):
-    """Плашка со значением в верхней панели."""
+class IconView(Widget):
+    """Иконка, нарисованная примитивами."""
 
-    def __init__(self, title: str, value: str = "—", accent=(1, 1, 1, 1), **kwargs):
-        super().__init__(
-            orientation="vertical",
-            size_hint_y=None,
-            height=dp(54),
-            padding=(dp(6), dp(3)),
-            spacing=dp(0),
-            **kwargs,
+    def __init__(self, kind: str, color=(1, 1, 1, 1), **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(26), dp(26)))
+        super().__init__(**kwargs)
+        self.kind = kind
+        self.icon_color = list(color)
+        self._group = InstructionGroup()
+        self.canvas.add(self._group)
+        self.bind(pos=self._redraw, size=self._redraw)
+        self._redraw()
+
+    def set_color(self, color) -> None:
+        if list(self.icon_color) != list(color):
+            self.icon_color = list(color)
+            self._redraw()
+
+    def _redraw(self, *_args) -> None:
+        self._group.clear()
+        if self.width <= 1 or self.height <= 1:
+            return
+        cx = self.x + self.width * 0.5
+        cy = self.y + self.height * 0.5
+        draw_icon(
+            self._group, self.kind, cx, cy,
+            min(self.width, self.height) * 0.94, self.icon_color,
         )
+
+
+class StatPill(BoxLayout):
+    """Компактная плашка-показатель: иконка, подпись и значение."""
+
+    def __init__(self, icon: str, title: str, value: str = "—",
+                 accent=(1, 1, 1, 1), **kwargs):
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(50))
+        kwargs.setdefault("padding", (dp(7), dp(3)))
+        kwargs.setdefault("spacing", dp(6))
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            self._glow_color = Color(1.0, 0.84, 0.36, 0.06)
+            self._glow = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(15)])
+            self._fill_color = Color(0.045, 0.105, 0.080, 0.88)
+            self._fill = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(14)])
+            self._top_color = Color(1, 1, 1, 0.05)
+            self._top = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(14)])
+        with self.canvas.after:
+            self._edge_color = Color(1.0, 0.85, 0.40, 0.16)
+            self._edge = Line(rounded_rectangle=(0, 0, 0, 0, dp(13)), width=dp(1.0))
+
+        self.icon = IconView(icon, accent)
+        self.icon.size = (dp(28), dp(28))
+        self.icon.pos_hint = {"center_y": 0.5}
+        self.add_widget(self.icon)
+
+        column = BoxLayout(orientation="vertical", spacing=dp(-1))
         self.title_label = Label(
-            text=title,
-            font_size=sp(9.5),
-            bold=True,
-            color=(0.72, 0.84, 0.76, 1),
-            halign="center",
-            valign="middle",
+            text=title, font_size=sp(8.5), bold=True,
+            color=(0.66, 0.79, 0.70, 1), halign="left", valign="middle",
+            shorten=True, max_lines=1,
         )
         self.title_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         self.value_label = Label(
-            text=value,
-            font_size=sp(15),
-            bold=True,
-            color=accent,
-            halign="center",
-            valign="middle",
+            text=value, font_size=sp(14.5), bold=True, color=accent,
+            halign="left", valign="middle", shorten=True, max_lines=1,
         )
         self.value_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        self.add_widget(self.title_label)
-        self.add_widget(self.value_label)
-
-        with self.canvas.before:
-            self._color = Color(0.04, 0.10, 0.07, 0.74)
-            self._rect = RoundedRectangle(
-                pos=self.pos, size=self.size, radius=[dp(12)]
-            )
+        column.add_widget(self.title_label)
+        column.add_widget(self.value_label)
+        self.add_widget(column)
         self.bind(pos=self._sync, size=self._sync)
+        self._sync()
 
     def _sync(self, *_args) -> None:
-        self._rect.pos = self.pos
-        self._rect.size = self.size
+        pad = dp(1)
+        self._glow.pos = (self.x - pad, self.y - pad)
+        self._glow.size = (self.width + pad * 2, self.height + pad * 2)
+        self._fill.pos = self.pos
+        self._fill.size = self.size
+        gloss_h = max(0.0, self.height * 0.5)
+        self._top.pos = (self.x + pad, self.y + self.height - gloss_h)
+        self._top.size = (max(0, self.width - pad * 2), max(0, gloss_h - pad))
+        self._top.radius = [dp(14), dp(14), 0, 0]
+        self._edge.rounded_rectangle = (
+            self.x + pad, self.y + pad,
+            max(0, self.width - pad * 2), max(0, self.height - pad * 2), dp(13),
+        )
 
     def set_value(self, text: str, color=None) -> None:
         _set_text(self.value_label, text)
         if color is not None and list(self.value_label.color) != list(color):
             self.value_label.color = color
+            self.icon.set_color(color)
 
 
 class Meter(Widget):
@@ -278,92 +338,135 @@ class Meter(Widget):
             self._sync()
 
 
-class HUD(FloatLayout):
-    """Верхняя панель: прочность базы, золото и волна."""
+class IconButton(GameButton):
+    """Круглая кнопка с нарисованным значком."""
 
-    def __init__(self, on_pause=None, on_shop=None, on_speed=None, **kwargs):
+    def __init__(self, icon: str, color=(0.10, 0.28, 0.34, 1),
+                 text_color=(0.9, 0.96, 1.0, 1), size: float = 46,
+                 icon_scale: float = 0.46, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(size), dp(size)))
+        super().__init__(
+            text="", color=color, text_color=text_color,
+            radius=size / 2.0, gloss=True, **kwargs,
+        )
+        self._icon = icon
+        self._icon_color = list(text_color)
+        self._icon_scale = icon_scale
+        self._glyph = InstructionGroup()
+        self.canvas.after.add(self._glyph)
+        self.bind(pos=self._draw_glyph, size=self._draw_glyph)
+        self._draw_glyph()
+
+    def _draw_glyph(self, *_args) -> None:
+        self._glyph.clear()
+        if self.width <= 1:
+            return
+        cx = self.x + self.width * 0.5
+        cy = self.y + self.height * 0.5
+        draw_icon(
+            self._glyph, self._icon, cx, cy,
+            min(self.width, self.height) * self._icon_scale, self._icon_color,
+        )
+
+    def set_icon(self, icon: str, color=None) -> None:
+        """Меняет значок (и, при желании, его цвет) и перерисовывает."""
+        self._icon = icon
+        if color is not None:
+            self._icon_color = list(color)
+        self._draw_glyph()
+
+
+class HUD(FloatLayout):
+    """Верхняя панель: база, золото, волна, герой и кнопки."""
+
+    def __init__(self, on_pause=None, on_shop=None, on_speed=None, on_music=None,
+                 **kwargs):
         super().__init__(size_hint=(1, 1), **kwargs)
         self.on_pause = on_pause or (lambda *args: None)
         self.on_shop = on_shop or (lambda *args: None)
         self.on_speed = on_speed or (lambda *args: None)
+        self.on_music = on_music or (lambda *args: None)
 
         self.panel = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(152) + dp(SAFE_TOP),
+            height=dp(158) + dp(SAFE_TOP),
             pos_hint={"top": 1},
-            padding=(dp(9) + dp(SAFE_SIDE), dp(6) + dp(SAFE_TOP)),
-            spacing=dp(3),
+            padding=(dp(9) + dp(SAFE_SIDE), dp(7) + dp(SAFE_TOP)),
+            spacing=dp(5),
         )
         # Полупрозрачная подложка: текст не теряется на фоне замка.
         with self.panel.canvas.before:
-            self._panel_color = Color(0.03, 0.07, 0.05, 0.80)
-            self._panel_bg = RoundedRectangle(
-                pos=self.panel.pos, size=self.panel.size, radius=[dp(14)]
+            self._panel_glow = Color(1.0, 0.84, 0.36, 0.05)
+            self._panel_glow_bg = RoundedRectangle(
+                pos=self.panel.pos, size=self.panel.size, radius=[dp(20)]
             )
-        self.panel.bind(
-            pos=lambda w, _v: setattr(self._panel_bg, "pos", w.pos),
-            size=lambda w, _v: setattr(self._panel_bg, "size", w.size),
-        )
+            self._panel_color = Color(0.03, 0.07, 0.05, 0.82)
+            self._panel_bg = RoundedRectangle(
+                pos=self.panel.pos, size=self.panel.size, radius=[dp(18)]
+            )
+            self._panel_top_color = Color(1, 1, 1, 0.04)
+            self._panel_top = RoundedRectangle(
+                pos=self.panel.pos, size=self.panel.size, radius=[dp(18)]
+            )
+        self.panel.bind(pos=self._sync_panel, size=self._sync_panel)
 
         row = BoxLayout(
             orientation="horizontal",
             size_hint_y=None,
-            height=dp(54),
+            height=dp(50),
             spacing=dp(6),
         )
-        self.base_chip = StatChip("БАЗА", "600", (0.45, 0.90, 0.55, 1))
-        self.gold_chip = StatChip("ЗОЛОТО", "0", (1.0, 0.84, 0.35, 1))
-        self.wave_chip = StatChip("ВОЛНА", f"1/{TOTAL_WAVES}", (0.86, 0.92, 1.0, 1))
+        self.base_chip = StatPill("base", "БАЗА", "600", (0.48, 0.92, 0.58, 1))
+        self.gold_chip = StatPill("coin", "ЗОЛОТО", "0", (1.0, 0.86, 0.38, 1))
+        self.wave_chip = StatPill("wave", "ВОЛНА", f"1/{TOTAL_WAVES}", (0.86, 0.92, 1.0, 1))
         row.add_widget(self.base_chip)
         row.add_widget(self.gold_chip)
         row.add_widget(self.wave_chip)
-
-        self.speed_button = GameButton(
-            text="x1",
-            color=(0.10, 0.28, 0.34, 1),
-            text_color=(0.84, 0.96, 1.0, 1),
-            size_hint=(None, None),
-            width=dp(46),
-            height=dp(46),
-            font_size=sp(13),
-            radius=13,
-        )
-        self.speed_button.pos_hint = {"center_y": 0.5}
-        self.speed_button.bind(on_release=lambda *_a: self.on_speed())
-        row.add_widget(self.speed_button)
-
-        self.shop_button = GameButton(
-            text="МАГ.",
-            color=(0.32, 0.20, 0.46, 1),
-            text_color=(1.0, 0.92, 1.0, 1),
-            size_hint=(None, None),
-            width=dp(46),
-            height=dp(46),
-            font_size=sp(11),
-            radius=13,
-        )
-        self.shop_button.pos_hint = {"center_y": 0.5}
-        self.shop_button.bind(on_release=lambda *_a: self.on_shop())
-        row.add_widget(self.shop_button)
-
-        self.pause_button = GameButton(
-            text="II",
-            color=(0.05, 0.13, 0.10, 0.92),
-            text_color=(1, 1, 1, 1),
-            size_hint=(None, None),
-            width=dp(46),
-            height=dp(46),
-            font_size=sp(16),
-            radius=13,
-        )
-        self.pause_button.pos_hint = {"center_y": 0.5}
-        self.pause_button.bind(on_release=lambda *_a: self.on_pause())
-        row.add_widget(self.pause_button)
         self.panel.add_widget(row)
 
-        self.base_meter = Meter(size_hint_y=None, height=dp(8))
+        self.base_meter = Meter(size_hint_y=None, height=dp(6))
         self.panel.add_widget(self.base_meter)
+
+        row2 = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(50),
+            spacing=dp(6),
+        )
+        self.hero_chip = StatPill("hero", "ГЕРОЙ", "100 / 100", (0.72, 0.95, 0.78, 1))
+        self.hero_chip.size_hint_x = 1
+        row2.add_widget(self.hero_chip)
+
+        self.speed_button = IconButton(
+            "speed", color=(0.10, 0.28, 0.34, 1),
+            text_color=(0.84, 0.96, 1.0, 1), size=46,
+        )
+        self.speed_button.bind(on_release=lambda *_a: self.on_speed())
+        row2.add_widget(self.speed_button)
+
+        self.shop_button = IconButton(
+            "shop", color=(0.32, 0.20, 0.46, 1),
+            text_color=(1.0, 0.92, 1.0, 1), size=46,
+        )
+        self.shop_button.bind(on_release=lambda *_a: self.on_shop())
+        row2.add_widget(self.shop_button)
+
+        self.music_button = IconButton(
+            "sound", color=(0.16, 0.34, 0.28, 1),
+            text_color=(0.90, 0.98, 0.92, 1), size=46,
+        )
+        self.music_button.bind(on_release=lambda *_a: self.on_music())
+        row2.add_widget(self.music_button)
+
+        self.pause_button = IconButton(
+            "pause", color=(0.05, 0.13, 0.10, 0.92),
+            text_color=(1, 1, 1, 1), size=46,
+        )
+        self.pause_button.bind(on_release=lambda *_a: self.on_pause())
+        row2.add_widget(self.pause_button)
+        self.panel.add_widget(row2)
 
         self.boss_row = BoxLayout(
             orientation="horizontal",
@@ -373,60 +476,51 @@ class HUD(FloatLayout):
             opacity=0,
         )
         self.boss_label = Label(
-            text="",
-            font_size=sp(9.5),
-            bold=True,
-            color=(1.0, 0.58, 0.46, 1),
-            size_hint_x=None,
-            width=dp(110),
-            halign="left",
-            valign="middle",
+            text="", font_size=sp(9.5), bold=True, color=(1.0, 0.58, 0.46, 1),
+            size_hint_x=None, width=dp(110), halign="left", valign="middle",
+            shorten=True, max_lines=1,
         )
-        self.boss_label.bind(
-            size=lambda w, _v: setattr(w, "text_size", w.size)
-        )
+        self.boss_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         self.boss_meter = Meter(color=(0.92, 0.24, 0.20, 1), size_hint_y=None, height=dp(10))
         self.boss_row.add_widget(self.boss_label)
         self.boss_row.add_widget(self.boss_meter)
         self.panel.add_widget(self.boss_row)
 
         self.status_label = Label(
-            text="",
-            font_size=sp(12),
-            bold=True,
-            color=(1.0, 0.86, 0.42, 1),
-            halign="center",
-            valign="middle",
-            size_hint_y=None,
-            height=dp(22),
+            text="", font_size=sp(10.5), bold=True, color=(1.0, 0.88, 0.50, 1),
+            halign="center", valign="middle", size_hint_y=None, height=dp(18),
+            shorten=True, max_lines=1,
         )
         self.status_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         self.panel.add_widget(self.status_label)
 
-        self.info_label = Label(
-            text="",
-            font_size=sp(10.5),
-            color=(0.82, 0.92, 0.86, 1),
-            halign="center",
-            valign="middle",
-            size_hint_y=None,
-            height=dp(20),
-        )
-        self.info_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        self.panel.add_widget(self.info_label)
-
         self.add_widget(self.panel)
+
+    def _sync_panel(self, *_args) -> None:
+        pad = dp(1.5)
+        self._panel_glow_bg.pos = (self.panel.x - pad, self.panel.y - pad)
+        self._panel_glow_bg.size = (
+            self.panel.width + pad * 2, self.panel.height + pad * 2
+        )
+        self._panel_bg.pos = self.panel.pos
+        self._panel_bg.size = self.panel.size
+        gloss_h = max(0.0, self.panel.height * 0.5)
+        self._panel_top.pos = (self.panel.x + pad, self.panel.y + self.panel.height - gloss_h)
+        self._panel_top.size = (
+            max(0, self.panel.width - pad * 2), max(0, gloss_h - pad)
+        )
+        self._panel_top.radius = [dp(18), dp(18), 0, 0]
 
     def set_stats(self, stats: dict) -> None:
         hp = int(stats.get("base_hp", 0))
         max_hp = max(1, int(stats.get("base_max_hp", 1)))
         ratio = hp / max_hp
         if ratio > 0.55:
-            color = (0.45, 0.90, 0.55, 1)
+            color = (0.48, 0.92, 0.58, 1)
         elif ratio > 0.25:
-            color = (1.0, 0.80, 0.30, 1)
+            color = (1.0, 0.82, 0.32, 1)
         else:
-            color = (1.0, 0.40, 0.32, 1)
+            color = (1.0, 0.42, 0.34, 1)
         self.base_chip.set_value(f"{hp} / {max_hp}", color)
         self.base_meter.set_ratio(ratio, color)
         self.gold_chip.set_value(str(int(stats.get("gold", 0))))
@@ -434,12 +528,30 @@ class HUD(FloatLayout):
             f"{int(stats.get('wave', 1))}/{int(stats.get('total_waves', TOTAL_WAVES))}"
         )
         speed = float(stats.get("time_scale", 1.0))
-        _set_text(self.speed_button, f"x{int(speed)}")
+        _set_text(self.speed_button, "")
         self.speed_button.set_active(speed > 1.0)
+
+        hero_hp = int(stats.get("hero_hp", 0))
+        hero_max = max(1, int(stats.get("hero_max_hp", 1)))
+        if stats.get("respawn", 0) > 0:
+            self.hero_chip.set_value(
+                f"возрождение {math.ceil(stats.get('respawn', 0))} с",
+                (1.0, 0.80, 0.42, 1),
+            )
+        else:
+            hero_ratio = hero_hp / hero_max
+            hero_color = (
+                (0.72, 0.95, 0.78, 1) if hero_ratio > 0.35 else (1.0, 0.62, 0.48, 1)
+            )
+            rage = ""
+            if stats.get("rage", 0) > 0:
+                rage = f" · ярость {math.ceil(stats.get('rage', 0))}с"
+            self.hero_chip.set_value(f"{hero_hp} / {hero_max}{rage}", hero_color)
 
         if stats.get("wave_state") == "prep":
             status = (
-                f"{stats.get('level_name', '')} · волна {int(stats.get('wave', 1))} через "
+                f"{stats.get('level_name', '')} · волна "
+                f"{int(stats.get('wave', 1))} через "
                 f"{int(math.ceil(stats.get('wave_timer', 0)))} с · "
                 f"{stats.get('preview', '')}"
             )
@@ -449,9 +561,16 @@ class HUD(FloatLayout):
                 f"{int(stats.get('wave', 1))} · врагов: "
                 f"{int(stats.get('enemies', 0))}"
             )
+        roam = ""
+        if stats.get("base_distance", 0) > 430:
+            arrow = {
+                "севернее": "↑", "южнее": "↓",
+                "западнее": "←", "восточнее": "→",
+            }.get(stats.get("base_dir", ""), "•")
+            roam = f" · база {arrow}{int(stats.get('base_distance', 0))}"
         if speed > 1.0:
-            status += f" · x{int(speed)}"
-        _set_text(self.status_label, status)
+            roam += f" · x{int(speed)}"
+        _set_text(self.status_label, status + roam)
 
         if stats.get("boss"):
             boss_max = max(1.0, float(stats.get("boss_max", 1)))
@@ -463,36 +582,58 @@ class HUD(FloatLayout):
         else:
             self.boss_row.opacity = 0
             self.boss_row.height = 0
+        # Строка босса добавляет высоту: панель чуть подрастает,
+        # чтобы подпись волны не вылезала за подложку.
+        target = dp(178 if stats.get("boss") else 158) + dp(SAFE_TOP)
+        if abs(self.panel.height - target) > 0.5:
+            self.panel.height = target
 
-        hero_hp = int(stats.get("hero_hp", 0))
-        hero_max = max(1, int(stats.get("hero_max_hp", 1)))
-        if stats.get("respawn", 0) > 0:
-            hero_text = f"Герой: возрождение {math.ceil(stats.get('respawn', 0))} с"
-        elif stats.get("rage", 0) > 0:
-            hero_text = f"Герой {hero_hp}/{hero_max} · ярость {math.ceil(stats.get('rage', 0))} с"
+    def set_music_state(self, enabled: bool) -> None:
+        """Показывает на кнопке динамика, включена ли музыка."""
+        if enabled:
+            self.music_button.set_icon("sound", (0.90, 0.98, 0.92, 1))
+            self.music_button.bg = [0.16, 0.34, 0.28, 1]
         else:
-            hero_text = f"Герой {hero_hp}/{hero_max}"
-        roam = ""
-        if stats.get("base_distance", 0) > 430:
-            arrow = {
-                "севернее": "↑",
-                "южнее": "↓",
-                "западнее": "←",
-                "восточнее": "→",
-            }.get(stats.get("base_dir", ""), "•")
-            roam = f" · База {arrow}{int(stats.get('base_distance', 0))}"
-        _set_text(
-            self.info_label,
-            f"{hero_text} · Бой {int(stats.get('defenders', 0))} · "
-            f"Ш {int(stats.get('mines', 0))} · "
-            f"Б {int(stats.get('towers', 0))} · "
-            f"К {int(stats.get('barracks', 0))} · "
-            f"Т {int(stats.get('totems', 0))}"
-            f"{roam}",
-        )
+            self.music_button.set_icon("mute", (0.96, 0.72, 0.66, 1))
+            self.music_button.bg = [0.26, 0.20, 0.20, 1]
+        self.music_button._normal_bg = list(self.music_button.bg)
+        self.music_button._refresh_style()
 
     def update_stats(self, stats: dict) -> None:
         self.set_stats(stats)
+
+
+class BuildCard(GameButton):
+    """Карточка постройки: значок сверху, название и цена внизу."""
+
+    def __init__(self, kind: str, icon: str, color=(0.13, 0.45, 0.28, 1),
+                 text_color=(1, 1, 1, 1), text: str = "", **kwargs):
+        kwargs.setdefault("height", dp(76))
+        super().__init__(text=text, color=color, text_color=text_color,
+                         radius=14, **kwargs)
+        self.kind = kind
+        self._icon = icon
+        self._icon_color = list(text_color)
+        self.valign = "bottom"
+        self._glyph = InstructionGroup()
+        self.canvas.after.add(self._glyph)
+        self.bind(pos=self._draw_glyph, size=self._draw_glyph)
+        self.bind(pos=self._sync_text, size=self._sync_text)
+        self._sync_text()
+
+    def _sync_text(self, *_args) -> None:
+        self.text_size = (self.width, self.height)
+
+    def _draw_glyph(self, *_args) -> None:
+        self._glyph.clear()
+        if self.width <= 1:
+            return
+        # Не берём self.center_x: кэш алиаса может быть ещё не сброшен.
+        draw_icon(
+            self._glyph, self._icon, self.x + self.width * 0.5,
+            self.y + self.height - dp(19),
+            min(self.width * 0.5, dp(24)), self._icon_color,
+        )
 
 
 class BuildBar(FloatLayout):
@@ -506,29 +647,31 @@ class BuildBar(FloatLayout):
         panel = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            height=dp(96) + dp(SAFE_BOTTOM) * 2,
+            height=dp(112) + dp(SAFE_BOTTOM) * 2,
             pos_hint={"x": 0, "y": 0},
-            padding=(dp(6) + dp(SAFE_SIDE), dp(5) + dp(SAFE_BOTTOM)),
-            spacing=dp(2),
+            padding=(dp(7) + dp(SAFE_SIDE), dp(6) + dp(SAFE_BOTTOM)),
+            spacing=dp(3),
         )
         with panel.canvas.before:
-            self._bg_color = Color(0.03, 0.07, 0.05, 0.86)
-            self._bg = RoundedRectangle(
-                pos=panel.pos, size=panel.size, radius=[dp(16)]
-            )
-        panel.bind(
-            pos=lambda w, _v: setattr(self._bg, "pos", w.pos),
-            size=lambda w, _v: setattr(self._bg, "size", w.size),
-        )
+            self._glow_color = Color(1.0, 0.84, 0.36, 0.05)
+            self._glow = RoundedRectangle(pos=panel.pos, size=panel.size, radius=[dp(22)])
+            self._bg_color = Color(0.03, 0.07, 0.05, 0.88)
+            self._bg = RoundedRectangle(pos=panel.pos, size=panel.size, radius=[dp(20)])
+            self._top_color = Color(1, 1, 1, 0.04)
+            self._top = RoundedRectangle(pos=panel.pos, size=panel.size, radius=[dp(20)])
+        panel.bind(pos=self._sync_panel, size=self._sync_panel)
+        self.panel_ref = panel
 
         self.hint = Label(
             text="Строй и защищай базу",
             font_size=sp(10),
-            color=(0.76, 0.88, 0.80, 1),
+            color=(0.78, 0.90, 0.82, 1),
             halign="center",
             valign="middle",
             size_hint_y=None,
-            height=dp(14),
+            height=dp(15),
+            shorten=True,
+            max_lines=1,
         )
         self.hint.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         panel.add_widget(self.hint)
@@ -536,18 +679,18 @@ class BuildBar(FloatLayout):
         row = BoxLayout(
             orientation="horizontal",
             size_hint_y=None,
-            height=dp(66),
-            spacing=dp(4),
+            height=dp(76),
+            spacing=dp(5),
         )
+        icons = {"mine": "mine", "tower": "tower", "barracks": "barracks", "totem": "totem"}
         self.buttons = {}
         for kind, data in BUILD_TYPES.items():
-            button = GameButton(
-                text=f"{data['short']}\n{data['cost']} з.",
+            button = BuildCard(
+                kind,
+                icons.get(kind, kind),
                 color=data["color"],
-                text_color=(1, 1, 1, 1),
-                height=dp(64),
-                radius=13,
-                font_size=sp(10.5),
+                text=f"{data['short']}\n{data['cost']} з.",
+                font_size=sp(10),
             )
             button.bind(on_release=lambda _inst, k=kind: self.on_build(k))
             row.add_widget(button)
@@ -557,15 +700,43 @@ class BuildBar(FloatLayout):
             text="УЛУЧШ.\n+",
             color=(0.30, 0.20, 0.52, 1),
             text_color=(1.0, 0.92, 1.0, 1),
-            height=dp(64),
-            radius=13,
-            font_size=sp(10.5),
+            height=dp(76),
+            radius=14,
+            font_size=sp(10),
         )
         self.upgrade_button.bind(on_release=lambda *_a: self.on_upgrades())
+        self._upgrade_glyph = InstructionGroup()
+        self.upgrade_button.canvas.after.add(self._upgrade_glyph)
+        self.upgrade_button.valign = "bottom"
+        self.upgrade_button.bind(
+            pos=lambda w, _v: self._draw_upgrade_glyph(w),
+            size=lambda w, _v: self._draw_upgrade_glyph(w),
+        )
         row.add_widget(self.upgrade_button)
         panel.add_widget(row)
 
         self.add_widget(panel)
+
+    def _sync_panel(self, *_args) -> None:
+        pad = dp(1.5)
+        self._glow.pos = (self.panel_ref.x - pad, self.panel_ref.y - pad)
+        self._glow.size = (self.panel_ref.width + pad * 2, self.panel_ref.height + pad * 2)
+        self._bg.pos = self.panel_ref.pos
+        self._bg.size = self.panel_ref.size
+        gloss_h = max(0.0, self.panel_ref.height * 0.45)
+        self._top.pos = (self.panel_ref.x + pad, self.panel_ref.y + self.panel_ref.height - gloss_h)
+        self._top.size = (max(0, self.panel_ref.width - pad * 2), max(0, gloss_h - pad))
+        self._top.radius = [dp(20), dp(20), 0, 0]
+
+    def _draw_upgrade_glyph(self, button) -> None:
+        self._upgrade_glyph.clear()
+        if button.width <= 1:
+            return
+        draw_icon(
+            self._upgrade_glyph, "upgrade", button.x + button.width * 0.5,
+            button.y + button.height - dp(19),
+            min(button.width * 0.5, dp(24)), list(button.text_color),
+        )
 
     def set_state(self, stats: dict, mode: str | None) -> None:
         gold = int(stats.get("gold", 0))
@@ -711,7 +882,7 @@ class WavePrompt(FloatLayout):
             text_color=(1.0, 0.94, 0.72, 1),
             size_hint=(0.76, None),
             height=dp(50),
-            pos_hint={"center_x": 0.5, "y": 0.135},
+            pos_hint={"center_x": 0.5, "y": 0.145},
             font_size=sp(10.5),
             radius=15,
         )

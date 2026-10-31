@@ -17,23 +17,25 @@ from kivy.uix.screenmanager import Screen
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
-from .arena import Arena
-from .config import (
+from ..world.arena import Arena
+from ..core.config import (
     AUTHOR,
     BUILD_TYPES,
     DISCORD_HANDLE,
     DISCORD_URL,
     GAME_TITLE,
     GLOBAL_UPGRADES,
+    SAFE_BOTTOM,
     SHOP_ITEMS,
     TOTAL_WAVES,
     UI_MUTED,
     VERSION,
 )
-from .gfx import circle, poly, ring
-from .levels import LEVELS
-from .progress import PROGRESS
-from .util import open_url
+from ..render.gfx import circle, poly, ring
+from ..world.levels import LEVELS, TUTORIAL, TUTORIAL_HINTS
+from ..core.audio import MENU_THEME, THEME_BY_LEVEL, music
+from ..core.progress import PROGRESS
+from ..core.util import open_url
 from .widgets import BuildBar, GameButton, HUD, Overlay, StarRow, Toast, WavePrompt
 
 
@@ -204,7 +206,8 @@ class CoinEmblem(Widget):
     def _redraw(self, *_args) -> None:
         group = self._group
         group.clear()
-        cx, cy = self.center
+        cx = self.x + self.width * 0.5
+        cy = self.y + self.height * 0.5
         radius = min(self.width, self.height) * 0.5
         if radius <= 1:
             return
@@ -278,114 +281,6 @@ class CoinEmblem(Widget):
                 size=(radius * 0.56, radius * 0.22),
             )
         )
-
-
-class AdSlot(FloatLayout):
-    """Зарезервированное место под будущий рекламный баннер."""
-
-    def __init__(self, **kwargs):
-        kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", dp(66))
-        super().__init__(**kwargs)
-        with self.canvas.before:
-            self._fill = Color(0.045, 0.100, 0.080, 0.62)
-            self._rect = RoundedRectangle(
-                pos=self.pos, size=self.size, radius=[dp(16)]
-            )
-            self._edge_color = Color(1.0, 0.84, 0.38, 0.16)
-            self._edge = Line(
-                rounded_rectangle=(0, 0, 0, 0, dp(16)), width=dp(1.1)
-            )
-            self._mark_color = Color(1.0, 0.84, 0.38, 0.30)
-            self._mark_a = Line(width=dp(1.4))
-            self._mark_b = Line(width=dp(1.4))
-
-        self.badge = Label(
-            text="AD",
-            font_size=sp(8.5),
-            bold=True,
-            color=(0.15, 0.12, 0.05, 1),
-            size_hint=(None, None),
-            size=(dp(30), dp(19)),
-            pos_hint={"x": 0.028, "center_y": 0.5},
-            halign="center",
-            valign="middle",
-        )
-        self.badge.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        with self.badge.canvas.before:
-            self._badge_fill = Color(0.98, 0.80, 0.34, 0.85)
-            self._badge_rect = RoundedRectangle(
-                pos=self.badge.pos, size=self.badge.size, radius=[dp(6)]
-            )
-        self.badge.bind(
-            pos=lambda w, _v: setattr(self._badge_rect, "pos", w.pos),
-            size=lambda w, _v: setattr(self._badge_rect, "size", w.size),
-        )
-        self.add_widget(self.badge)
-
-        self.title = Label(
-            text="МЕСТО ДЛЯ РЕКЛАМЫ",
-            font_size=sp(9.5),
-            bold=True,
-            color=(0.96, 0.84, 0.52, 0.80),
-            size_hint=(1, None),
-            height=dp(19),
-            pos_hint={"center_x": 0.5, "top": 0.90},
-            halign="center",
-            valign="middle",
-        )
-        self.title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        self.add_widget(self.title)
-
-        self.subtitle = Label(
-            text="баннер партнёра · 320 x 50",
-            font_size=sp(8.5),
-            color=(0.60, 0.73, 0.65, 0.75),
-            size_hint=(1, None),
-            height=dp(17),
-            pos_hint={"center_x": 0.5, "y": 0.13},
-            halign="center",
-            valign="middle",
-        )
-        self.subtitle.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        self.add_widget(self.subtitle)
-
-        self.bind(pos=self._sync, size=self._sync)
-        self._sync()
-
-    def _sync(self, *_args) -> None:
-        pad = dp(1)
-        self._rect.pos = self.pos
-        self._rect.size = self.size
-        self._edge.rounded_rectangle = (
-            self.x + pad,
-            self.y + pad,
-            max(0, self.width - pad * 2),
-            max(0, self.height - pad * 2),
-            dp(15),
-        )
-        inset = dp(6)
-        arm = dp(10)
-        self._mark_a.points = [
-            self.x + inset,
-            self.y + self.height - inset,
-            self.x + inset + arm,
-            self.y + self.height - inset,
-            self.x + inset,
-            self.y + self.height - inset,
-            self.x + inset,
-            self.y + self.height - inset - arm,
-        ]
-        self._mark_b.points = [
-            self.x + self.width - inset,
-            self.y + inset,
-            self.x + self.width - inset - arm,
-            self.y + inset,
-            self.x + self.width - inset,
-            self.y + inset,
-            self.x + self.width - inset,
-            self.y + inset + arm,
-        ]
 
 
 class MenuCard(BoxLayout):
@@ -486,7 +381,8 @@ class Medallion(Widget):
     def _redraw(self, *_args) -> None:
         group = self._group
         group.clear()
-        cx, cy = self.center
+        cx = self.x + self.width * 0.5
+        cy = self.y + self.height * 0.5
         radius = min(self.width, self.height) * 0.5
         if radius <= 1:
             return
@@ -704,14 +600,14 @@ class InfoOverlay(Overlay):
         box = MenuCard(
             orientation="vertical",
             size_hint=(0.9, None),
-            height=dp(468),
+            height=dp(470),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
             padding=(dp(18), dp(16)),
             spacing=dp(7),
         )
 
         title = Label(
-            text="ОБ ИГРЕ",
+            text="ОБ АВТОРЕ",
             font_size=sp(24),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
@@ -769,11 +665,10 @@ class InfoOverlay(Overlay):
 
         controls = Label(
             text=(
-                "Телефон: тяни палец по полю — герой идёт.\n"
-                "ПК: WASD — движение · 1-4 — постройки · U — улучшения\n"
-                "F — волна · T — скорость · Space — пауза"
+                "Тяни палец по полю — герой идёт за ним.\n"
+                "Собирай золото и строй обороны вокруг базы."
             ),
-            font_size=sp(9),
+            font_size=sp(9.5),
             color=UI_MUTED,
             size_hint_y=None,
             height=dp(58),
@@ -787,22 +682,40 @@ class InfoOverlay(Overlay):
             "DISCORD · elsty",
             color=(0.255, 0.300, 0.700, 1),
             text_color=(0.95, 0.96, 1.0, 1),
-            height=dp(46),
+            height=dp(44),
             radius=13,
             font_size=sp(13),
         )
         box.add_widget(self.discord_button)
 
+        self.discord_status = Label(
+            text=DISCORD_HANDLE,
+            font_size=sp(8.5),
+            color=(0.62, 0.74, 0.66, 0.9),
+            size_hint_y=None,
+            height=dp(16),
+            halign="center",
+            valign="middle",
+            shorten=True,
+            max_lines=1,
+        )
+        self.discord_status.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(self.discord_status)
+
         self.close_button = GameButton(
             "ЗАКРЫТЬ",
             color=(0.22, 0.24, 0.28, 1),
-            height=dp(46),
+            height=dp(44),
             radius=13,
             font_size=sp(14),
         )
         box.add_widget(self.close_button)
 
         self.add_panel(box)
+
+    def set_discord_status(self, text: str, color) -> None:
+        self.discord_status.text = text
+        self.discord_status.color = color
 
 
 class MenuScreen(Screen):
@@ -811,7 +724,6 @@ class MenuScreen(Screen):
         self.name = "menu"
         self.app_ref = app_ref
         self.screen_manager = screen_manager
-        self.level_buttons = []
         self._discord_timer = None
 
         self.backdrop = Backdrop()
@@ -825,7 +737,7 @@ class MenuScreen(Screen):
         )
         self.add_widget(self.scroll)
 
-        self._base_height = dp(528) + self._levels_block()
+        self._base_height = dp(344)
         self.column = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
@@ -873,35 +785,236 @@ class MenuScreen(Screen):
         self.column.add_widget(brand)
         self.column.add_widget(self._spacer(12))
 
-        # ------------------------------------------------ место под рекламу
-        self.ad_slot = AdSlot()
-        self.column.add_widget(self.ad_slot)
-        self.column.add_widget(self._spacer(14))
-
-        # --------------------------------------------------- играть / инфо
-        self.play_button = GameButton(
-            text="ИГРАТЬ",
+        # ---------------------------------------------- продолжить / играть
+        self.continue_button = GameButton(
+            text="ПРОДОЛЖИТЬ",
             color=(0.16, 0.56, 0.30, 1),
             text_color=(0.96, 1.0, 0.96, 1),
             height=dp(64),
             radius=18,
             font_size=sp(22),
         )
-        self.play_button.bind(on_release=self._play_continue)
-        self.column.add_widget(self.play_button)
-        self.column.add_widget(self._spacer(8))
+        self.continue_button.bind(on_release=self._continue)
+        self.column.add_widget(self.continue_button)
+        self.column.add_widget(self._spacer(9))
 
-        self.info_button = GameButton(
-            text="ИНФОРМАЦИЯ",
-            color=(0.20, 0.24, 0.30, 1),
-            text_color=(0.90, 0.94, 0.98, 1),
-            height=dp(50),
-            radius=15,
-            font_size=sp(14),
+        self.play_button = GameButton(
+            text="ИГРАТЬ · ВЫБОР КАРТЫ",
+            color=(0.22, 0.36, 0.66, 1),
+            text_color=(0.94, 0.97, 1.0, 1),
+            height=dp(56),
+            radius=16,
+            font_size=sp(16),
         )
-        self.info_button.bind(on_release=self._open_info)
-        self.column.add_widget(self.info_button)
-        self.column.add_widget(self._spacer(14))
+        self.play_button.bind(on_release=self._open_levels)
+        self.column.add_widget(self.play_button)
+        self.column.add_widget(self._spacer(9))
+
+        # -------------------------------------------------- строка прогресса
+        self.progress_label = Label(
+            text="",
+            font_size=sp(10),
+            bold=True,
+            color=UI_MUTED,
+            size_hint_y=None,
+            height=dp(20),
+            halign="center",
+            valign="middle",
+        )
+        self.progress_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        self.column.add_widget(self.progress_label)
+        self.column.add_widget(self._spacer(10))
+
+        # ------------------- «ОБ АВТОРЕ»: маленькая кнопка у нижнего края
+        # Держим её отдельно от прокручиваемой колонки, чтобы она всегда
+        # была прижата к самому низу экрана, а не «висела» в середине.
+        self.bottom_bar = FloatLayout(
+            size_hint=(1, None),
+            height=dp(46) + dp(SAFE_BOTTOM),
+            pos_hint={"x": 0, "y": 0},
+        )
+        self.about_button = GameButton(
+            text="ОБ АВТОРЕ",
+            color=(0.17, 0.20, 0.25, 1),
+            text_color=(0.84, 0.89, 0.94, 1),
+            size_hint=(None, None),
+            width=dp(140),
+            height=dp(34),
+            radius=11,
+            font_size=sp(11),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+        )
+        self.about_button.bind(on_release=self._open_info)
+        self.bottom_bar.add_widget(self.about_button)
+        self.add_widget(self.bottom_bar)
+
+        self.scroll.bind(size=self._fit_column)
+        Clock.schedule_once(self._fit_column, 0)
+
+        self.info = InfoOverlay()
+        self.info.discord_button.bind(on_release=self._discord)
+        self.info.close_button.bind(on_release=lambda *_a: self.info.close())
+        self.add_widget(self.info)
+
+        Clock.schedule_once(lambda _dt: self.refresh_menu(), 0)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _spacer(height: float) -> Widget:
+        return Widget(size_hint_y=None, height=height)
+
+    def _fit_column(self, *_args) -> None:
+        """Растягивает колонку на высоту экрана и делит лишнее на отступы."""
+        reserve = self.bottom_bar.height + dp(6)
+        viewport = max(dp(1), self.scroll.height)
+        base = self._base_height
+        usable = max(dp(1), viewport - reserve)
+        if usable <= base + dp(1):
+            self.column.height = usable
+            self.column.padding = (dp(13), 0, dp(13), 0)
+            return
+        extra = usable - base
+        top = int(extra * 0.45)
+        bottom = int(extra) - top
+        self.column.height = usable
+        self.column.padding = (dp(13), top, dp(13), bottom)
+        Clock.schedule_once(lambda _dt: self.emblem._redraw(), 0)
+
+    def on_enter(self) -> None:
+        self.backdrop.running = True
+        music.apply_settings(PROGRESS.music)
+        music.play(MENU_THEME)
+        self.refresh_menu()
+
+    def on_leave(self) -> None:
+        self.backdrop.running = False
+
+    def refresh_menu(self) -> None:
+        if not PROGRESS.tutorial_done and PROGRESS.unlocked <= 1:
+            self.progress_label.text = "СНАЧАЛА — КОРОТКОЕ ОБУЧЕНИЕ · 3 ВОЛНЫ"
+            return
+        unlocked = max(1, min(len(LEVELS), PROGRESS.unlocked))
+        text = f"ОТКРЫТО КАРТ: {unlocked} ИЗ {len(LEVELS)}"
+        if PROGRESS.tutorial_done:
+            text += "  ·  обучение пройдено"
+        self.progress_label.text = text
+
+    def _continue(self, *_args) -> None:
+        """Продолжает обучение (в первый раз) или самую дальнюю открытую карту."""
+        if not PROGRESS.tutorial_done and PROGRESS.unlocked <= 1:
+            game = self.screen_manager.get_screen("game")
+            game.start_tutorial()
+            self.screen_manager.current = "game"
+            return
+        index = max(0, min(len(LEVELS) - 1, PROGRESS.unlocked - 1))
+        self._start_level(index)
+
+    def _start_level(self, index: int) -> None:
+        game = self.screen_manager.get_screen("game")
+        game.start_level(index)
+        self.screen_manager.current = "game"
+
+    def _open_levels(self, *_args) -> None:
+        self.screen_manager.current = "levels"
+
+    def _open_info(self, *_args) -> None:
+        self.info.open()
+
+    def _close_info(self, *_args) -> None:
+        self.info.close()
+
+    def _discord(self, *_args) -> None:
+        result = open_url(DISCORD_URL)
+        messages = {
+            "opened": ("Ссылка открыта в браузере", (0.60, 0.94, 0.64, 1)),
+            "copied": ("Ссылка скопирована в буфер", (0.98, 0.86, 0.48, 1)),
+            "failed": ("Не удалось открыть ссылку", (1.0, 0.55, 0.48, 1)),
+        }
+        text, color = messages.get(result, messages["failed"])
+        self.info.set_discord_status(text, color)
+        if self._discord_timer is not None:
+            self._discord_timer.cancel()
+        self._discord_timer = Clock.schedule_once(self._restore_discord_link, 2.6)
+
+    def _restore_discord_link(self, *_args) -> None:
+        self._discord_timer = None
+        self.info.set_discord_status(DISCORD_HANDLE, (0.62, 0.74, 0.66, 0.9))
+
+
+class LevelsScreen(Screen):
+    """Экран выбора карты: обучение и шесть настоящих уровней."""
+
+    def __init__(self, app_ref, screen_manager, **kwargs):
+        super().__init__(**kwargs)
+        self.name = "levels"
+        self.app_ref = app_ref
+        self.screen_manager = screen_manager
+        self.level_buttons = []
+
+        self.backdrop = Backdrop()
+        self.add_widget(self.backdrop)
+
+        self.scroll = ScrollView(
+            size_hint=(1, 1),
+            do_scroll_x=False,
+            bar_width=0,
+            scroll_type=["bars", "content"],
+        )
+        self.add_widget(self.scroll)
+
+        self._base_height = dp(300) + self._levels_block()
+        self.column = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, None),
+            height=self._base_height,
+            padding=(dp(13), 0, dp(13), 0),
+        )
+        self.scroll.add_widget(self.column)
+
+        # ---------------------------------------------------------- шапка
+        top = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(52),
+            spacing=dp(10),
+        )
+        self.back_button = GameButton(
+            text="НАЗАД",
+            color=(0.18, 0.22, 0.28, 1),
+            text_color=(0.88, 0.93, 0.98, 1),
+            size_hint=(None, None),
+            size=(dp(96), dp(44)),
+            radius=13,
+            font_size=sp(12),
+        )
+        self.back_button.bind(on_release=self._back)
+        top.add_widget(self.back_button)
+
+        title = Label(
+            text="ВЫБОР КАРТЫ",
+            font_size=sp(20),
+            bold=True,
+            color=(1.0, 0.84, 0.35, 1),
+            halign="left",
+            valign="middle",
+        )
+        title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        top.add_widget(title)
+        self.column.add_widget(top)
+        self.column.add_widget(Widget(size_hint_y=None, height=dp(10)))
+
+        # ---------------------------------------------------------- обучение
+        self.tutorial_button = GameButton(
+            text="ОБУЧЕНИЕ · короткая карта\nдвижение · золото · первая башня",
+            color=(0.14, 0.42, 0.34, 1),
+            text_color=(0.92, 1.0, 0.95, 1),
+            height=dp(72),
+            radius=15,
+            font_size=sp(12),
+        )
+        self.tutorial_button.bind(on_release=self._play_tutorial)
+        self.column.add_widget(self.tutorial_button)
+        self.column.add_widget(Widget(size_hint_y=None, height=dp(12)))
 
         # ---------------------------------------------------------- карты
         self.levels_card = MenuCard(
@@ -947,111 +1060,9 @@ class MenuScreen(Screen):
             self.level_buttons.append(tile)
 
         self.column.add_widget(self.levels_card)
-        self.column.add_widget(self._spacer(14))
-
-        # ---------------------------------------------------------- подсказка
-        help_card = MenuCard(
-            orientation="vertical",
-            size_hint_y=None,
-            height=dp(56),
-            padding=(dp(12), dp(7)),
-            spacing=dp(1),
-        )
-        help_top = Label(
-            text="Собирай золото, строй оборону и не дай снести ворота",
-            font_size=sp(9.5),
-            color=(0.82, 0.91, 0.84, 1),
-            halign="center",
-            valign="middle",
-        )
-        help_top.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        help_card.add_widget(help_top)
-        help_bottom = Label(
-            text="WASD — бой · 1-4 постройки · U улучшения · F волна · T скорость · Space пауза",
-            font_size=sp(8),
-            color=UI_MUTED,
-            halign="center",
-            valign="middle",
-        )
-        help_bottom.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        help_card.add_widget(help_bottom)
-        self.column.add_widget(help_card)
-        self.column.add_widget(self._spacer(12))
-
-        # ---------------------------------------------------------- футер
-        footer = BoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(54),
-            spacing=dp(8),
-        )
-        left = BoxLayout(orientation="vertical", size_hint_x=0.44)
-        copyright_label = Label(
-            text=f"© 2026 {AUTHOR}",
-            font_size=sp(11),
-            bold=True,
-            color=(0.98, 0.84, 0.42, 1),
-            halign="left",
-            valign="middle",
-        )
-        copyright_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        left.add_widget(copyright_label)
-        made_label = Label(
-            text=f"автор игры · v{VERSION}",
-            font_size=sp(8),
-            color=UI_MUTED,
-            halign="left",
-            valign="middle",
-        )
-        made_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        left.add_widget(made_label)
-        footer.add_widget(left)
-
-        right = BoxLayout(orientation="vertical", size_hint_x=0.56, spacing=dp(2))
-        self.discord_button = GameButton(
-            text="DISCORD · elsty",
-            color=(0.255, 0.300, 0.700, 1),
-            text_color=(0.95, 0.96, 1.0, 1),
-            height=dp(34),
-            radius=11,
-            font_size=sp(10.5),
-        )
-        self.discord_button.bind(on_release=self._discord)
-        right.add_widget(self.discord_button)
-        self.discord_link = Label(
-            text=DISCORD_HANDLE,
-            font_size=sp(7.5),
-            color=(0.55, 0.68, 0.60, 0.9),
-            halign="right",
-            valign="middle",
-            shorten=True,
-        )
-        self.discord_link.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        right.add_widget(self.discord_link)
-        footer.add_widget(right)
-
-        self.column.add_widget(footer)
+        self.column.add_widget(Widget(size_hint_y=None, height=dp(14)))
         self.scroll.bind(size=self._fit_column)
         Clock.schedule_once(self._fit_column, 0)
-
-        self.quit = GameButton(
-            text="ВЫХОД",
-            color=(0.11, 0.16, 0.13, 0.78),
-            text_color=(0.82, 0.90, 0.84, 1),
-            size_hint=(None, None),
-            size=(dp(84), dp(34)),
-            pos_hint={"right": 0.985, "top": 0.99},
-            font_size=sp(10.5),
-            radius=10,
-        )
-        self.quit.bind(on_release=self._quit)
-        self.add_widget(self.quit)
-
-        self.info = InfoOverlay()
-        self.info.discord_button.bind(on_release=self._discord)
-        self.info.close_button.bind(on_release=lambda *_a: self.info.close())
-        self.add_widget(self.info)
-
         Clock.schedule_once(lambda _dt: self.refresh_levels(), 0)
 
     # ------------------------------------------------------------------
@@ -1060,10 +1071,6 @@ class MenuScreen(Screen):
         """Высота карточки со списком карт (растёт с числом карт)."""
         count = max(1, len(LEVELS))
         return dp(24) + count * dp(110) + count * dp(8) + dp(24)
-
-    @staticmethod
-    def _spacer(height: float) -> Widget:
-        return Widget(size_hint_y=None, height=height)
 
     def _fit_column(self, *_args) -> None:
         """Растягивает колонку на всю высоту и делит лишнее место на отступы."""
@@ -1078,10 +1085,11 @@ class MenuScreen(Screen):
         bottom = int(extra) - top
         self.column.height = viewport
         self.column.padding = (dp(13), top, dp(13), bottom)
-        Clock.schedule_once(lambda _dt: self.emblem._redraw(), 0)
 
     def on_enter(self) -> None:
         self.backdrop.running = True
+        music.apply_settings(PROGRESS.music)
+        music.play(MENU_THEME)
         self.refresh_levels()
 
     def on_leave(self) -> None:
@@ -1095,6 +1103,18 @@ class MenuScreen(Screen):
             stars = PROGRESS.stars(level.id) if available else 0
             best_wave = PROGRESS.best_wave(level.id) if available else 0
             tile.set_data(available, stars, best_wave)
+        if PROGRESS.tutorial_done:
+            self.tutorial_button.text = (
+                "ОБУЧЕНИЕ · пройдено\nможно повторить в любой момент"
+            )
+        else:
+            self.tutorial_button.text = (
+                "ОБУЧЕНИЕ · короткая карта\n"
+                "движение · золото · первая башня"
+            )
+
+    def _back(self, *_args) -> None:
+        self.screen_manager.current = "menu"
 
     def _play(self, index: int) -> None:
         if not PROGRESS.is_unlocked(index):
@@ -1103,38 +1123,10 @@ class MenuScreen(Screen):
         game.start_level(index)
         self.screen_manager.current = "game"
 
-    def _play_continue(self, *_args) -> None:
-        """Big «ИГРАТЬ»: продолжает с самой дальней открытой карты."""
-        index = max(0, min(len(LEVELS) - 1, PROGRESS.unlocked - 1))
-        self._play(index)
-
-    def _open_info(self, *_args) -> None:
-        self.info.open()
-
-    def _close_info(self, *_args) -> None:
-        self.info.close()
-
-    def _quit(self, _instance) -> None:
-        self.app_ref.stop()
-
-    def _discord(self, *_args) -> None:
-        result = open_url(DISCORD_URL)
-        messages = {
-            "opened": ("Ссылка открыта в браузере", (0.60, 0.94, 0.64, 1)),
-            "copied": ("Ссылка скопирована в буфер", (0.98, 0.86, 0.48, 1)),
-            "failed": ("Не удалось открыть ссылку", (1.0, 0.55, 0.48, 1)),
-        }
-        text, color = messages.get(result, messages["failed"])
-        self.discord_link.text = text
-        self.discord_link.color = color
-        if self._discord_timer is not None:
-            self._discord_timer.cancel()
-        self._discord_timer = Clock.schedule_once(self._restore_discord_link, 2.6)
-
-    def _restore_discord_link(self, *_args) -> None:
-        self._discord_timer = None
-        self.discord_link.text = DISCORD_HANDLE
-        self.discord_link.color = (0.55, 0.68, 0.60, 0.9)
+    def _play_tutorial(self, *_args) -> None:
+        game = self.screen_manager.get_screen("game")
+        game.start_tutorial()
+        self.screen_manager.current = "game"
 
 
 class PauseOverlay(Overlay):
@@ -1622,6 +1614,9 @@ class GameScreen(Screen):
         self.screen_manager = screen_manager
         self.level_index = 0
         self._selected_level = 0
+        self._selected_tutorial = False
+        self._tutorial_finished = False
+        self._hint_events = []
 
         self.arena = Arena(self._on_toast, self._on_end, self._on_building)
         self.add_widget(self.arena)
@@ -1630,7 +1625,9 @@ class GameScreen(Screen):
             on_pause=self._toggle_pause,
             on_shop=self._open_shop,
             on_speed=self._toggle_speed,
+            on_music=self._toggle_music,
         )
+        self.hud.set_music_state(PROGRESS.music)
         self.add_widget(self.hud)
 
         self.build_bar = BuildBar(
@@ -1665,7 +1662,7 @@ class GameScreen(Screen):
             on_release=lambda *_a: self.building_panel.close()
         )
         self.end.again_button.bind(on_release=self._restart)
-        self.end.menu_button.bind(on_release=self._menu)
+        self.end.menu_button.bind(on_release=self._to_levels)
 
         self._sync = Clock.schedule_interval(self._sync_hud, 0.1)
         Window.bind(on_key_down=self._on_key_down)
@@ -1673,25 +1670,58 @@ class GameScreen(Screen):
     # ------------------------------------------------------------------
     def start_level(self, index: int) -> None:
         """Выбор карты из меню. Старт произойдёт при входе на экран."""
+        self._selected_tutorial = False
+        self._tutorial_finished = False
         self._selected_level = max(0, min(len(LEVELS) - 1, index))
+
+    def start_tutorial(self) -> None:
+        """Запускает короткую обучающую карту."""
+        self._selected_tutorial = True
+        self._tutorial_finished = False
+
+    def _current_level(self):
+        if self._selected_tutorial:
+            return TUTORIAL, 0
+        return LEVELS[self._selected_level], self._selected_level
+
+    def _load_current(self) -> None:
+        level, index = self._current_level()
+        self.level_index = index
+        self.arena.load_level(level, index)
+        self.arena.start_new()
+        self.arena.resume()
+        music.apply_settings(PROGRESS.music)
+        music.play(THEME_BY_LEVEL.get(level.id, MENU_THEME))
+        self._sync_hud()
+        self.toast.show(f"{level.name}: {level.desc}", "gold", 3.8)
+        if level.tutorial:
+            self._schedule_hints()
 
     def on_enter(self) -> None:
         self._close_all()
-        self.level_index = self._selected_level
-        level = LEVELS[self.level_index]
-        self.arena.load_level(level, self.level_index)
-        self.arena.start_new()
-        self.arena.resume()
-        self._sync_hud()
-        self.toast.show(
-            f"{level.name}: {level.desc}",
-            "gold",
-            3.8,
-        )
+        self._cancel_hints()
+        self._load_current()
 
     def on_leave(self) -> None:
+        self._cancel_hints()
         self._close_all()
         self.arena.stop()
+
+    # ------------------------------------------------------------------
+    def _schedule_hints(self) -> None:
+        """Показывает подсказки обучения по очереди, не мешая бою."""
+        self._cancel_hints()
+        for step, text in enumerate(TUTORIAL_HINTS):
+            event = Clock.schedule_once(
+                lambda _dt, t=text: self.toast.show(t, "blue", 3.0),
+                4.2 + step * 5.8,
+            )
+            self._hint_events.append(event)
+
+    def _cancel_hints(self) -> None:
+        for event in self._hint_events:
+            event.cancel()
+        self._hint_events = []
 
     # ------------------------------------------------------------------
     def _on_toast(self, text: str, kind: str = "info") -> None:
@@ -1707,6 +1737,20 @@ class GameScreen(Screen):
         index = self.arena.level_index
         total = int(level.waves)
         waves = total if win else max(0, int(stats.get("wave", 1)) - 1)
+        if level.tutorial:
+            self._cancel_hints()
+            self.end.open(win, stats, 3 if win else 0, "", level.name)
+            if win:
+                PROGRESS.mark_tutorial_done()
+                self._tutorial_finished = True
+                self.end.title.text = "ОБУЧЕНИЕ ПРОЙДЕНО!"
+                self.end.unlock_label.text = "Дальше — первая настоящая карта"
+                self.end.again_button.text = "НАЧАТЬ ДОЛИНУ"
+            else:
+                self.end.title.text = "ПОПРОБУЙ ЕЩЁ"
+                self.end.again_button.text = "ПОВТОРИТЬ ОБУЧЕНИЕ"
+            return
+        self.end.again_button.text = "ИГРАТЬ СНОВА"
         ratio = self.arena.base_hp / max(1.0, self.arena.base_max_hp)
         stars, newly_unlocked = PROGRESS.record(
             index, level.id, win, waves, ratio, total
@@ -1730,6 +1774,7 @@ class GameScreen(Screen):
     def _sync_hud(self, *_args) -> None:
         stats = self.arena.stats()
         self.hud.update_stats(stats)
+        self.hud.set_music_state(music.enabled)
         self.build_bar.set_state(stats, self.arena.build_mode)
         overlays = (
             self.pause.visible
@@ -1799,6 +1844,11 @@ class GameScreen(Screen):
             return
         self.arena.toggle_speed()
         self._sync_hud()
+
+    def _toggle_music(self, *_args) -> None:
+        enabled = music.toggle()
+        PROGRESS.set_music(enabled)
+        self.hud.set_music_state(enabled)
 
     def _call_wave(self, *_args) -> None:
         if self.arena.ended or self.end.visible:
@@ -1879,10 +1929,20 @@ class GameScreen(Screen):
 
     def _restart(self, *_args) -> None:
         self._close_all()
+        if self._tutorial_finished:
+            # Обучение пройдено: сразу ведём на первую настоящую карту.
+            self.start_level(0)
+            self._load_current()
+            return
         self.arena.start_new()
         self.arena.resume()
         self._sync_hud()
         self.toast.show("Новая оборона началась", "gold", 2.0)
+
+    def _to_levels(self, *_args) -> None:
+        self._close_all()
+        self.arena.stop()
+        self.screen_manager.current = "levels"
 
     def _menu(self, *_args) -> None:
         self._close_all()
