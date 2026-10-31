@@ -94,7 +94,7 @@ jobs:
     name: Build Windows build
     runs-on: windows-latest
     needs: apk
-    timeout-minutes: 90
+    timeout-minutes: 180
 
     steps:
       - name: Получить исходники
@@ -110,6 +110,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt pyinstaller
+
+      - name: Ускорить сборку (Defender)
+        shell: powershell
+        run: |
+          # На windows-latest антивирус сканирует каждый файл PyInstaller и
+          # растягивает сборку до 1.5 часов. Исключаем папку сборки из проверки.
+          try { Add-MpPreference -ExclusionPath "${{ github.workspace }}" -ErrorAction Stop } catch {}
+          try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop } catch {}
+          Write-Output "Defender tuning done"
 
       - name: Собрать Windows-версию
         run: powershell -ExecutionPolicy Bypass -File build_windows.ps1 -Version 1.4.0 -NoVenv
