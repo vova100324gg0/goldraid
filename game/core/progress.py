@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date
 from pathlib import Path
 
 from ..world.levels import LEVELS
 
 # Версия формата сохранения. При изменении структуры старые файлы
 # дочитываются значениями по умолчанию, а не теряются.
-SAVE_VERSION = 2
+SAVE_VERSION = 3
 
 DEFAULT_COUNTERS = {
     "runs": 0,
@@ -48,9 +49,13 @@ class Progress:
         self.music = True
         self.language = "ru"
         self.quality = "auto"
+        self.sfx = True
         self.achievements: dict[str, bool] = {}
         self.seen_version = ""
         self.counters = dict(DEFAULT_COUNTERS)
+        # Рекорды режимов: бесконечный и ежедневная карта.
+        self.endless_best = 0
+        self.daily: dict = {"date": "", "best": 0, "done": False, "win": False}
         self.load()
 
     # ------------------------------------------------------------------
@@ -80,6 +85,7 @@ class Progress:
         self.quality = str(raw.get("quality", "auto"))
         if self.quality not in ("auto", "high", "low"):
             self.quality = "auto"
+        self.sfx = bool(raw.get("sfx", True))
         achievements = raw.get("achievements")
         if isinstance(achievements, dict):
             self.achievements = {
@@ -93,6 +99,22 @@ class Progress:
                     self.counters[key] = max(0, int(counters.get(key, value)))
                 except (TypeError, ValueError):
                     self.counters[key] = value
+        try:
+            self.endless_best = max(0, int(raw.get("endless_best", 0)))
+        except (TypeError, ValueError):
+            self.endless_best = 0
+        daily = raw.get("daily")
+        if isinstance(daily, dict):
+            try:
+                best = max(0, int(daily.get("best", 0)))
+            except (TypeError, ValueError):
+                best = 0
+            self.daily = {
+                "date": str(daily.get("date", "")),
+                "best": best,
+                "done": bool(daily.get("done", False)),
+                "win": bool(daily.get("win", False)),
+            }
         # Старый файл без версии — просто миграция: все поля уже с
         # значениями по умолчанию, а прогресс карт сохранён.
         try:
@@ -111,9 +133,12 @@ class Progress:
                 "music": self.music,
                 "language": self.language,
                 "quality": self.quality,
+                "sfx": self.sfx,
                 "achievements": self.achievements,
                 "seen_version": self.seen_version,
                 "counters": dict(self.counters),
+                "endless_best": self.endless_best,
+                "daily": dict(self.daily),
             }
             self.path.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2),
@@ -148,6 +173,51 @@ class Progress:
             self.quality = mode
             self.save()
         return self.quality
+
+    def set_sfx(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled != self.sfx:
+            self.sfx = enabled
+            self.save()
+
+    # ------------------------------------------------------------------
+    # Режимы: бесконечный и ежедневная карта
+    # ------------------------------------------------------------------
+    @staticmethod
+    def today() -> str:
+        return date.today().isoformat()
+
+    def daily_seed(self) -> int:
+        """Сид ежедневной карты: один и тот же для всех в этот день."""
+        return int(self.today().replace("-", ""))
+
+    def record_endless(self, waves: int) -> bool:
+        """Обновляет рекорд бесконечного режима. True — если рекорд побит."""
+        waves = max(0, int(waves))
+        if waves <= self.endless_best:
+            return False
+        self.endless_best = waves
+        self.save()
+        return True
+
+    def daily_of_today(self) -> dict:
+        """Результат ежедневной карты за сегодня; сбрасывается на новый день."""
+        today = self.today()
+        if self.daily.get("date") != today:
+            self.daily = {"date": today, "best": 0, "done": False, "win": False}
+            self.save()
+        return self.daily
+
+    def daily_done(self) -> bool:
+        return bool(self.daily_of_today().get("done", False))
+
+    def record_daily(self, waves: int, win: bool) -> None:
+        entry = self.daily_of_today()
+        entry["best"] = max(int(entry.get("best", 0)), max(0, int(waves)))
+        entry["done"] = True
+        entry["win"] = bool(entry.get("win", False)) or bool(win)
+        self.daily = entry
+        self.save()
 
     def mark_seen(self, version: str) -> None:
         if version and self.seen_version != version:
@@ -218,13 +288,15 @@ class Progress:
 
     # ------------------------------------------------------------------
     def reset(self) -> None:
-        """Сбрасывает прогресс, сохраняя язык, музыку и качество графики."""
+        """Сбрасывает прогресс, сохраняя язык, музыку, звуки и качество."""
         self.unlocked = 1
         self.best = {}
         self.tutorial_done = False
         self.achievements = {}
         self.seen_version = ""
         self.counters = dict(DEFAULT_COUNTERS)
+        self.endless_best = 0
+        self.daily = {"date": "", "best": 0, "done": False, "win": False}
         self.version = SAVE_VERSION
         self.save()
 

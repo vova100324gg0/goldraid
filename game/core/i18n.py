@@ -377,6 +377,48 @@ EN: dict[str, str] = {
         "• Progress reset with confirmation"
     ),
     "• Мелкие исправления интерфейса": "• Minor interface fixes",
+    # --- режимы 1.4.0 ----------------------------------------------------
+    "ИГРАТЬ · КАРТЫ И РЕЖИМЫ": "PLAY · MAPS & MODES",
+    "РЕЖИМЫ": "MODES",
+    "БЕСКОНЕЧНЫЙ РЕЖИМ": "ENDLESS MODE",
+    "БЕСКОНЕЧНЫЙ РЕЖИМ\nбез конца волн": "ENDLESS MODE\nwaves never stop",
+    "БЕСКОНЕЧНЫЙ РЕЖИМ\nрекорд: волна {n}": "ENDLESS MODE\nbest: wave {n}",
+    "ЕЖЕДНЕВНАЯ КАРТА": "DAILY MAP",
+    "ЕЖЕДНЕВНАЯ КАРТА\nновая карта дня": "DAILY MAP\nnew map today",
+    "ЕЖЕДНЕВНАЯ КАРТА\nпройдена · волна {n}": "DAILY MAP\ndone · wave {n}",
+    "Бесконечный режим: держись как можно дольше": (
+        "Endless mode: hold out as long as you can"
+    ),
+    "Ежедневная карта: {name}": "Daily map: {name}",
+    "БЕСКОНЕЧНЫЙ РЕЖИМ · ВОЛНА {n}": "ENDLESS MODE · WAVE {n}",
+    "ЕЖЕДНЕВНАЯ КАРТА · ВОЛНА {n}": "DAILY MAP · WAVE {n}",
+    "ЕЩЁ РАЗ": "AGAIN",
+    "СЕГОДНЯ ПРОЙДЕНО": "DONE TODAY",
+    "Новый рекорд!": "New record!",
+    "Лучший результат: волна {n}": "Best result: wave {n}",
+    "Возвращайся завтра за новой картой": (
+        "Come back tomorrow for a new map"
+    ),
+    "Отбито волн: {waves}\n"
+    "Добыто золота: {gold} · Побед: {kills}\n"
+    "Построек осталось: {buildings}": (
+        "Waves repelled: {waves}\n"
+        "Gold earned: {gold} · Victories: {kills}\n"
+        "Buildings left: {buildings}"
+    ),
+    # --- звуки -----------------------------------------------------------
+    "ЗВУКИ": "SOUND",
+    # --- что нового 1.4.0 ------------------------------------------------
+    "• Бесконечный режим: волны без конца и рекорд": (
+        "• Endless mode: waves never stop, chase the record"
+    ),
+    "• Ежедневная карта: новая карта каждый день": (
+        "• Daily map: a fresh map every day"
+    ),
+    "• Звуковые эффекты и переключатель «Звуки»": (
+        "• Sound effects and a Sound toggle"
+    ),
+    "• Отдельные рекорды режимов": "• Separate records for each mode",
 }
 
 

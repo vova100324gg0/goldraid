@@ -38,6 +38,7 @@ from ..core.audio import MENU_THEME, THEME_BY_LEVEL, music
 from ..core.changelog import CHANGELOG, latest_version
 from ..core.i18n import LANGUAGES, set_language, t
 from ..core.progress import PROGRESS
+from ..core.sfx import sfx
 from ..core.util import open_url
 from .widgets import BuildBar, GameButton, HUD, Overlay, StarRow, Toast, WavePrompt
 
@@ -761,6 +762,7 @@ class SettingsOverlay(Overlay):
         self,
         on_language=None,
         on_music=None,
+        on_sfx=None,
         on_quality=None,
         on_reset=None,
         on_whats_new=None,
@@ -769,6 +771,7 @@ class SettingsOverlay(Overlay):
         super().__init__(**kwargs)
         self.on_language = on_language or (lambda *_a: None)
         self.on_music = on_music or (lambda *_a: None)
+        self.on_sfx = on_sfx or (lambda *_a: None)
         self.on_quality = on_quality or (lambda *_a: None)
         self.on_reset = on_reset or (lambda *_a: None)
         self.on_whats_new = on_whats_new or (lambda *_a: None)
@@ -778,7 +781,7 @@ class SettingsOverlay(Overlay):
         box = MenuCard(
             orientation="vertical",
             size_hint=(0.92, None),
-            height=dp(468),
+            height=dp(530),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
             padding=(dp(18), dp(14)),
             spacing=dp(6),
@@ -816,6 +819,17 @@ class SettingsOverlay(Overlay):
         )
         self.music_button.bind(on_release=lambda *_a: self.on_music())
         box.add_widget(self.music_button)
+
+        box.add_widget(self._section(t("ЗВУКИ")))
+        self.sfx_button = GameButton(
+            text="",
+            color=(0.15, 0.30, 0.24, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(13),
+        )
+        self.sfx_button.bind(on_release=lambda *_a: self.on_sfx())
+        box.add_widget(self.sfx_button)
 
         box.add_widget(self._section(t("КАЧЕСТВО ГРАФИКИ")))
         self.quality_buttons = {}
@@ -903,6 +917,7 @@ class SettingsOverlay(Overlay):
         for code, button in self.language_buttons.items():
             button.set_active(code == PROGRESS.language)
         self.music_button.text = t("ВКЛ") if PROGRESS.music else t("ВЫКЛ")
+        self.sfx_button.text = t("ВКЛ") if PROGRESS.sfx else t("ВЫКЛ")
         for mode, button in self.quality_buttons.items():
             button.set_active(mode == PROGRESS.quality)
         if not self._confirm_reset:
@@ -1159,7 +1174,7 @@ class MenuScreen(Screen):
         self.column.add_widget(self._spacer(9))
 
         self.play_button = GameButton(
-            text=t("ИГРАТЬ · ВЫБОР КАРТЫ"),
+            text=t("ИГРАТЬ · КАРТЫ И РЕЖИМЫ"),
             color=(0.22, 0.36, 0.66, 1),
             text_color=(0.94, 0.97, 1.0, 1),
             height=dp(56),
@@ -1247,6 +1262,7 @@ class MenuScreen(Screen):
         self.settings = SettingsOverlay(
             on_language=self._set_language,
             on_music=self._toggle_music_setting,
+            on_sfx=self._toggle_sfx_setting,
             on_quality=self._set_quality,
             on_reset=self._reset_progress,
             on_whats_new=self._open_whats_new,
@@ -1296,6 +1312,7 @@ class MenuScreen(Screen):
         self.backdrop.running = True
         music.apply_settings(PROGRESS.music)
         music.play(MENU_THEME)
+        sfx.apply_settings(PROGRESS.sfx)
         self.refresh_menu()
 
     def on_leave(self) -> None:
@@ -1365,6 +1382,13 @@ class MenuScreen(Screen):
         music.apply_settings(enabled)
         self.settings.refresh()
 
+    def _toggle_sfx_setting(self, *_args) -> None:
+        enabled = not PROGRESS.sfx
+        PROGRESS.set_sfx(enabled)
+        sfx.apply_settings(enabled)
+        sfx.play("click")
+        self.settings.refresh()
+
     def _set_quality(self, mode: str) -> None:
         PROGRESS.set_quality(mode)
         self.settings.refresh()
@@ -1423,7 +1447,7 @@ class LevelsScreen(Screen):
         )
         self.add_widget(self.scroll)
 
-        self._base_height = dp(300) + self._levels_block()
+        self._base_height = dp(420) + self._levels_block()
         self.column = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
@@ -1475,6 +1499,64 @@ class LevelsScreen(Screen):
         )
         self.tutorial_button.bind(on_release=self._play_tutorial)
         self.column.add_widget(self.tutorial_button)
+        self.column.add_widget(Widget(size_hint_y=None, height=dp(12)))
+
+        # ---------------------------------------------------------- режимы
+        self.modes_card = MenuCard(
+            orientation="vertical",
+            size_hint_y=None,
+            height=dp(116),
+            padding=(dp(12), dp(10)),
+            spacing=dp(6),
+        )
+        modes_header = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(20),
+            spacing=dp(6),
+        )
+        modes_title = Label(
+            text=t("РЕЖИМЫ"),
+            font_size=sp(11),
+            bold=True,
+            color=(1.0, 0.84, 0.40, 1),
+            halign="left",
+            valign="middle",
+        )
+        modes_title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        modes_header.add_widget(modes_title)
+        self.modes_card.add_widget(modes_header)
+
+        modes_row = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(56),
+            spacing=dp(8),
+        )
+        self.endless_button = GameButton(
+            text="",
+            color=(0.26, 0.24, 0.52, 1),
+            text_color=(0.94, 0.93, 1.0, 1),
+            height=dp(56),
+            radius=13,
+            font_size=sp(10.5),
+        )
+        self.endless_button.bind(on_release=self._play_endless)
+        modes_row.add_widget(self.endless_button)
+
+        self.daily_button = GameButton(
+            text="",
+            color=(0.18, 0.40, 0.38, 1),
+            text_color=(0.90, 1.0, 0.96, 1),
+            height=dp(56),
+            radius=13,
+            font_size=sp(10.5),
+        )
+        self.daily_button.bind(on_release=self._play_daily)
+        modes_row.add_widget(self.daily_button)
+
+        self.modes_card.add_widget(modes_row)
+        self.column.add_widget(self.modes_card)
         self.column.add_widget(Widget(size_hint_y=None, height=dp(12)))
 
         # ---------------------------------------------------------- карты
@@ -1551,6 +1633,7 @@ class LevelsScreen(Screen):
         self.backdrop.running = True
         music.apply_settings(PROGRESS.music)
         music.play(MENU_THEME)
+        sfx.apply_settings(PROGRESS.sfx)
         self.refresh_levels()
 
     def on_leave(self) -> None:
@@ -1575,6 +1658,22 @@ class LevelsScreen(Screen):
                 "ОБУЧЕНИЕ · короткая карта\n"
                 "движение · золото · первая башня"
             )
+        best = int(PROGRESS.endless_best)
+        if best > 0:
+            self.endless_button.text = t(
+                "БЕСКОНЕЧНЫЙ РЕЖИМ\nрекорд: волна {n}"
+            ).format(n=best)
+        else:
+            self.endless_button.text = t("БЕСКОНЕЧНЫЙ РЕЖИМ\nбез конца волн")
+        daily = PROGRESS.daily_of_today()
+        if daily.get("done"):
+            self.daily_button.text = t(
+                "ЕЖЕДНЕВНАЯ КАРТА\nпройдена · волна {n}"
+            ).format(n=int(daily.get("best", 0)))
+            self.daily_button.disabled = True
+        else:
+            self.daily_button.text = t("ЕЖЕДНЕВНАЯ КАРТА\nновая карта дня")
+            self.daily_button.disabled = False
 
     def _back(self, *_args) -> None:
         self.screen_manager.current = "menu"
@@ -1584,6 +1683,18 @@ class LevelsScreen(Screen):
             return
         game = self.screen_manager.get_screen("game")
         game.start_level(index)
+        self.screen_manager.current = "game"
+
+    def _play_endless(self, *_args) -> None:
+        game = self.screen_manager.get_screen("game")
+        game.start_endless()
+        self.screen_manager.current = "game"
+
+    def _play_daily(self, *_args) -> None:
+        if PROGRESS.daily_done():
+            return
+        game = self.screen_manager.get_screen("game")
+        game.start_daily()
         self.screen_manager.current = "game"
 
     def _play_tutorial(self, *_args) -> None:
@@ -2096,17 +2207,29 @@ class EndOverlay(Overlay):
             )
         else:
             self.achievements_label.text = ""
-        self.stats_label.text = t(
-            "Отбито волн: {waves} / {total}\n"
-            "Добыто золота: {gold} · Побед: {kills}\n"
-            "Построек осталось: {buildings}"
-        ).format(
-            waves=waves,
-            total=total,
-            gold=int(stats.get("gold_earned", 0)),
-            kills=int(stats.get("kills", 0)),
-            buildings=int(stats.get("buildings", 0)),
-        )
+        if stats.get("endless"):
+            self.stats_label.text = t(
+                "Отбито волн: {waves}\n"
+                "Добыто золота: {gold} · Побед: {kills}\n"
+                "Построек осталось: {buildings}"
+            ).format(
+                waves=waves,
+                gold=int(stats.get("gold_earned", 0)),
+                kills=int(stats.get("kills", 0)),
+                buildings=int(stats.get("buildings", 0)),
+            )
+        else:
+            self.stats_label.text = t(
+                "Отбито волн: {waves} / {total}\n"
+                "Добыто золота: {gold} · Побед: {kills}\n"
+                "Построек осталось: {buildings}"
+            ).format(
+                waves=waves,
+                total=total,
+                gold=int(stats.get("gold_earned", 0)),
+                kills=int(stats.get("kills", 0)),
+                buildings=int(stats.get("buildings", 0)),
+            )
         self.visible = True
 
 
@@ -2120,6 +2243,8 @@ class GameScreen(Screen):
         self._selected_level = 0
         self._selected_tutorial = False
         self._tutorial_finished = False
+        self.mode = "campaign"
+        self._daily_seed = None
         self._hint_events = []
 
         self.arena = Arena(self._on_toast, self._on_end, self._on_building)
@@ -2172,16 +2297,37 @@ class GameScreen(Screen):
         Window.bind(on_key_down=self._on_key_down)
 
     # ------------------------------------------------------------------
-    def start_level(self, index: int) -> None:
+    def start_level(self, index: int, mode: str = "campaign") -> None:
         """Выбор карты из меню. Старт произойдёт при входе на экран."""
         self._selected_tutorial = False
         self._tutorial_finished = False
+        self.mode = mode if mode in ("campaign", "endless", "daily") else "campaign"
+        self._daily_seed = None
         self._selected_level = max(0, min(len(LEVELS) - 1, index))
+
+    def start_endless(self) -> None:
+        """Бесконечный режим: последняя карта, волны без конца."""
+        self._selected_tutorial = False
+        self._tutorial_finished = False
+        self.mode = "endless"
+        self._daily_seed = None
+        self._selected_level = len(LEVELS) - 1
+
+    def start_daily(self) -> None:
+        """Ежедневная карта: сид от даты, одна попытка в день."""
+        self._selected_tutorial = False
+        self._tutorial_finished = False
+        self.mode = "daily"
+        seed = PROGRESS.daily_seed()
+        self._daily_seed = seed
+        self._selected_level = seed % len(LEVELS)
 
     def start_tutorial(self) -> None:
         """Запускает короткую обучающую карту."""
         self._selected_tutorial = True
         self._tutorial_finished = False
+        self.mode = "campaign"
+        self._daily_seed = None
 
     def _current_level(self):
         if self._selected_tutorial:
@@ -2191,13 +2337,30 @@ class GameScreen(Screen):
     def _load_current(self) -> None:
         level, index = self._current_level()
         self.level_index = index
-        self.arena.load_level(level, index)
+        seed = self._daily_seed if self.mode == "daily" else None
+        self.arena.load_level(level, index, mode=self.mode, seed=seed)
         self.arena.start_new()
         self.arena.resume()
         music.apply_settings(PROGRESS.music)
         music.play(THEME_BY_LEVEL.get(level.id, MENU_THEME))
+        sfx.apply_settings(PROGRESS.sfx)
         self._sync_hud()
-        self.toast.show(t("{name}: {desc}").format(name=t(level.name), desc=t(level.desc)), "gold", 3.8)
+        if self.mode == "endless":
+            self.toast.show(
+                t("Бесконечный режим: держись как можно дольше"), "gold", 3.8
+            )
+        elif self.mode == "daily":
+            self.toast.show(
+                t("Ежедневная карта: {name}").format(name=t(level.name)),
+                "gold",
+                3.8,
+            )
+        else:
+            self.toast.show(
+                t("{name}: {desc}").format(name=t(level.name), desc=t(level.desc)),
+                "gold",
+                3.8,
+            )
         if level.tutorial:
             self._schedule_hints()
 
@@ -2241,6 +2404,47 @@ class GameScreen(Screen):
         index = self.arena.level_index
         total = int(level.waves)
         waves = total if win else max(0, int(stats.get("wave", 1)) - 1)
+        self.end.again_button.disabled = False
+        if self.mode in ("endless", "daily"):
+            run = dict(stats)
+            run["win"] = win
+            run["waves"] = waves
+            PROGRESS.add_run(run)
+            new_achievements = check_achievements(PROGRESS, run)
+            if self.mode == "endless":
+                previous = PROGRESS.endless_best
+                updated = PROGRESS.record_endless(waves)
+                self.end.open(
+                    False, stats, 0, "", t(level.name), new_achievements
+                )
+                self.end.title.text = t("БЕСКОНЕЧНЫЙ РЕЖИМ · ВОЛНА {n}").format(
+                    n=waves
+                )
+                self.end.title.color = (1.0, 0.84, 0.35, 1)
+                self.end.stars_label.text = ""
+                self.end.again_button.text = t("ЕЩЁ РАЗ")
+                self.end.unlock_label.text = (
+                    t("Новый рекорд!")
+                    if updated
+                    else t("Лучший результат: волна {n}").format(n=previous)
+                )
+            else:
+                PROGRESS.record_daily(waves, win)
+                self.end.open(
+                    win, stats, 3 if win else 0, "", t(level.name),
+                    new_achievements,
+                )
+                self.end.title.text = t("ЕЖЕДНЕВНАЯ КАРТА · ВОЛНА {n}").format(
+                    n=waves
+                )
+                self.end.title.color = (1.0, 0.84, 0.35, 1)
+                self.end.stars_label.text = ""
+                self.end.again_button.text = t("СЕГОДНЯ ПРОЙДЕНО")
+                self.end.again_button.disabled = True
+                self.end.unlock_label.text = t(
+                    "Возвращайся завтра за новой картой"
+                )
+            return
         if level.tutorial:
             self._cancel_hints()
             if win:
@@ -2448,6 +2652,9 @@ class GameScreen(Screen):
 
     def _restart(self, *_args) -> None:
         self._close_all()
+        if self.mode == "daily" and PROGRESS.daily_done():
+            self.screen_manager.current = "levels"
+            return
         if self._tutorial_finished:
             # Обучение пройдено: сразу ведём на первую настоящую карту.
             self.start_level(0)

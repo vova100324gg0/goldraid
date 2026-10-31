@@ -18,6 +18,7 @@ from kivy.uix.widget import Widget
 
 from ..core.config import BUILD_TYPES, SAFE_BOTTOM, SAFE_SIDE, SAFE_TOP, TOTAL_WAVES
 from ..core.i18n import t
+from ..core.sfx import sfx
 from ..render.gfx import star
 from ..render.icons import draw_icon
 
@@ -101,7 +102,13 @@ class GameButton(Button):
             )
         self.bind(pos=self._sync, size=self._sync, state=self._refresh_style)
         self.bind(disabled=self._refresh_style)
+        # Лёгкий щелчок на любую кнопку интерфейса. Не мешает тем, кто вешает
+        # свой on_press: Kivy-привязки складываются, а не заменяют друг друга.
+        self.bind(on_press=self._play_click)
         self._refresh_style()
+
+    def _play_click(self, *_args) -> None:
+        sfx.play("click")
 
     def _refresh_style(self, *_args) -> None:
         if not hasattr(self, "_bg_color"):
@@ -525,9 +532,12 @@ class HUD(FloatLayout):
         self.base_chip.set_value(f"{hp} / {max_hp}", color)
         self.base_meter.set_ratio(ratio, color)
         self.gold_chip.set_value(str(int(stats.get("gold", 0))))
-        self.wave_chip.set_value(
-            f"{int(stats.get('wave', 1))}/{int(stats.get('total_waves', TOTAL_WAVES))}"
-        )
+        if stats.get("endless"):
+            self.wave_chip.set_value(str(int(stats.get("wave", 1))))
+        else:
+            self.wave_chip.set_value(
+                f"{int(stats.get('wave', 1))}/{int(stats.get('total_waves', TOTAL_WAVES))}"
+            )
         speed = float(stats.get("time_scale", 1.0))
         _set_text(self.speed_button, "")
         self.speed_button.set_active(speed > 1.0)
@@ -919,7 +929,11 @@ class WavePrompt(FloatLayout):
         total = int(stats.get("total_waves", TOTAL_WAVES))
         left = int(math.ceil(float(stats.get("wave_timer", 0))))
         bonus = int(stats.get("call_bonus", 0))
-        if wave >= total:
+        if stats.get("endless"):
+            caption = t("ВОЛНА {wave} ЧЕРЕЗ {left} С").format(
+                wave=wave, left=left
+            )
+        elif wave >= total:
             caption = t("ПОСЛЕДНЯЯ ВОЛНА")
         else:
             caption = t("ВОЛНА {wave} ЧЕРЕЗ {left} С").format(

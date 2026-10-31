@@ -48,6 +48,7 @@ from ..entities.entities import (
 from .levels import LEVELS, Level
 from ..core.i18n import t
 from ..core.progress import PROGRESS
+from ..core.sfx import sfx
 from ..render.renderer import draw_arena
 from ..render.sprites import draw_building, draw_castle, draw_slot, draw_spawn_marker
 from ..core.util import clamp, dist, normalize
@@ -90,6 +91,9 @@ class Arena(Widget):
 
         self.level: Level = LEVELS[0]
         self.level_index = 0
+        # Режим боя: "campaign" | "endless" | "daily".
+        self.mode = "campaign"
+        self.run_seed: int | None = None
         self.world_w = self.level.world_w
         self.world_h = self.level.world_h
         self.hero_bounds = (40.0, 40.0, self.world_w - 40.0, self.world_h - 40.0)
@@ -114,10 +118,13 @@ class Arena(Widget):
     # ------------------------------------------------------------------
     # Состояние
     # ------------------------------------------------------------------
-    def load_level(self, level: Level, index: int = 0) -> None:
+    def load_level(self, level: Level, index: int = 0, mode: str = "campaign",
+                   seed: int | None = None) -> None:
         """Переключает карту: новый фон, площадки и баланс."""
         self.level = level
         self.level_index = index
+        self.mode = mode if mode in ("campaign", "endless", "daily") else "campaign"
+        self.run_seed = seed
         self.world_w = level.world_w
         self.world_h = level.world_h
         self.hero_bounds = (40.0, 40.0, self.world_w - 40.0, self.world_h - 40.0)
@@ -140,6 +147,10 @@ class Arena(Widget):
 
     def _reset_state(self) -> None:
         level = self.level
+        # Ежедневная карта детерминирована: состав волн и добыча одинаковы
+        # для всех в этот день.
+        if self.mode == "daily" and self.run_seed is not None:
+            random.seed(int(self.run_seed))
         self.elapsed = 0.0
         self.gold = level.start_gold
         self.gold_earned = 0
@@ -239,6 +250,8 @@ class Arena(Widget):
             "gold_earned": int(self.gold_earned),
             "wave": self.wave,
             "total_waves": self.level.waves,
+            "mode": self.mode,
+            "endless": self.mode == "endless",
             "level_name": t(self.level.name),
             "level_index": self.level_index,
             "wave_state": self.wave_state,
@@ -359,6 +372,7 @@ class Arena(Widget):
         self._add_particles(x, y + 26, 10, (1.0, 0.86, 0.36, 1), speed=90)
         if kind == "barracks":
             self._spawn_defender(building)
+        sfx.play("build")
         return True, t("{name} построена").format(name=t(data["name"]))
 
     def building_upgrade_cost(self, building: Building) -> int:
@@ -859,6 +873,7 @@ class Arena(Widget):
             )
             self._damage_enemy(target, damage, building.x, building.y, aggro=False)
             building.cooldown = data["cooldown"][level]
+            sfx.play("shoot")
             self.effects.append(
                 Effect(
                     "bolt",
@@ -948,6 +963,7 @@ class Arena(Widget):
                 self.gold_earned += coin.value
                 self._add_ring(coin.x, coin.y, 18, (1.0, 0.86, 0.32, 1))
                 self._add_particles(coin.x, coin.y + 6, 6, (1.0, 0.88, 0.36, 1), speed=70)
+                sfx.play("coin")
                 self.on_toast(
                     t("+{amount} золота").format(amount=coin.value), "gold"
                 )
@@ -1111,8 +1127,9 @@ class Arena(Widget):
     def _wave_units(self, wave: int) -> list[str]:
         """Состав волны: чем дальше, тем больше новых видов и вожаков."""
         total = self.level.waves
+        endless = self.mode == "endless"
         count = 4 + wave + max(0, wave - 6)
-        if wave == total:
+        if wave == total and not endless:
             count += 3
         units: list[str] = []
         for _ in range(count):
@@ -1131,16 +1148,21 @@ class Arena(Widget):
                 units.append("runner")
             else:
                 units.append("grunt")
-        # Каждую чётную волну ведёт вожак. На последней волне его
-        # заменяет большой босс, чтобы не было двойного пика.
-        if wave % 2 == 0 and wave < total:
+        # Каждую чётную волну ведёт вожак. В кампании на последней волне
+        # его заменяет большой босс, чтобы не было двойного пика.
+        if wave % 2 == 0 and (endless or wave < total):
             units.append("chief")
-        if wave >= total:
+        if endless:
+            # В бесконечном режиме босс приходит каждые 5 волн.
+            if wave % 5 == 0:
+                units.append("boss")
+        elif wave >= total:
             units.append("boss")
         return units
 
     def _start_wave(self, bonus: int = 0) -> None:
         self.wave_state = "fight"
+        sfx.play("wave")
         self.pending = list(self.next_units) if self.next_units else self._wave_units(self.wave)
         self.next_units = []
         self.spawn_timer = 0.0
@@ -1217,7 +1239,7 @@ class Arena(Widget):
         bonus = WAVE_REWARD + (self.wave - 1) * WAVE_REWARD_STEP
         self.gold += bonus
         self.gold_earned += bonus
-        if self.wave >= self.level.waves:
+        if self.mode != "endless" and self.wave >= self.level.waves:
             self._end(True)
             return
         self.on_toast(
@@ -1241,6 +1263,7 @@ class Arena(Widget):
             return
         self.base_hp -= amount
         self._shake = max(self._shake, 7.0)
+        sfx.play("hit")
         bx, by = self.level.base_pos
         self._add_particles(
             bx + random.uniform(-60, 60),
@@ -1305,6 +1328,7 @@ class Arena(Widget):
         self.ended = True
         self.running = False
         self._clear_input()
+        sfx.play("win" if win else "lose")
         self.on_end(win, self.stats())
 
     # ------------------------------------------------------------------
