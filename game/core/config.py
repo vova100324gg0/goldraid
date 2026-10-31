@@ -53,7 +53,7 @@ AUTHOR = "elsty"
 GAME_TITLE = "ЗОЛОТОЙ РЕЙД"
 DISCORD_URL = "https://discord.com/users/579542324686618669"
 DISCORD_HANDLE = "discord.com/users/579542324686618669"
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 UI_DEEP = (0.012, 0.040, 0.030, 1)
 UI_DEEP_2 = (0.024, 0.076, 0.055, 1)
@@ -98,6 +98,8 @@ GOLD_PILE_COUNT = 7
 GOLD_PILE_VALUE = (10, 24)
 GOLD_PILE_RESPAWN = 9.0
 GOLD_PILE_RANGE = 36.0
+# Крупная жила на новых картах: одна монета стоит заметно дороже.
+RICH_GOLD_VALUE = 30
 
 # Площадки под постройки вокруг базы.
 BUILD_SLOTS = [
@@ -378,6 +380,44 @@ ENEMY_TYPES = {
         "radius": 40,
         "gold": 140,
         "armor": 0.25,
+        "boss": True,
+    },
+    "berserker": {
+        "name": "Берсерк",
+        "hp": 130,
+        "speed": 100,
+        "damage": 13,
+        "radius": 17,
+        "gold": 16,
+        "armor": 0.0,
+    },
+    "golem": {
+        "name": "Голем",
+        "hp": 430,
+        "speed": 44,
+        "damage": 26,
+        "radius": 27,
+        "gold": 28,
+        "armor": 0.55,
+    },
+    "necromancer": {
+        "name": "Некромант",
+        "hp": 165,
+        "speed": 64,
+        "damage": 5,
+        "radius": 18,
+        "gold": 24,
+        "armor": 0.0,
+        "range": 200,
+    },
+    "warlord": {
+        "name": "Тёмный владыка",
+        "hp": 2800,
+        "speed": 50,
+        "damage": 38,
+        "radius": 42,
+        "gold": 220,
+        "armor": 0.35,
         "boss": True,
     },
 }

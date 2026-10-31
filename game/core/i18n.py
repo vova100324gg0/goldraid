@@ -354,7 +354,7 @@ EN: dict[str, str] = {
     "Стойкий защитник": "Steadfast Defender",
     "Отбей 100 волн": "Repel 100 waves",
     "Покоритель карт": "Map Conqueror",
-    "Пройди все шесть карт": "Clear all six maps",
+    "Пройди все карты": "Clear every map",
     "Достижения: {names}": "Achievements: {names}",
     # --- что нового ------------------------------------------------------
     "ЧТО НОВОГО · {version}": "WHAT'S NEW · {version}",
@@ -419,6 +419,57 @@ EN: dict[str, str] = {
         "• Sound effects and a Sound toggle"
     ),
     "• Отдельные рекорды режимов": "• Separate records for each mode",
+    # --- контент 1.5.0 ---------------------------------------------------
+    "Забытые руины": "Forgotten Ruins",
+    "Четыре дороги сквозь камни": "Four roads through the stone",
+    "Древние стены рассыпались, но дороги остались. Здесь много золота и очень много врагов.": (
+        "The ancient walls have crumbled, but the roads remain. "
+        "Plenty of gold and even more enemies."
+    ),
+    "Тёмная цитадель": "Dark Citadel",
+    "Пять дорог во тьме": "Five roads in the dark",
+    "Последний рубеж. Пять дорог, бесконечные орды и Тёмный владыка у самых ворот.": (
+        "The last stand. Five roads, endless hordes, "
+        "and the Dark Warlord at the gates."
+    ),
+    "Берсерк": "Berserker",
+    "Голем": "Golem",
+    "Некромант": "Necromancer",
+    "Тёмный владыка": "Dark Warlord",
+    "владыка": "warlord",
+    "големы": "golems",
+    "некроманты": "necromancers",
+    "берсерки": "berserkers",
+    "ТЁМНЫЙ ВЛАДЫКА ПРОБУДИЛСЯ!": "THE DARK WARLORD AWAKENS!",
+    "ВОЛНА {wave} · ВЛАДЫКА И {count} ВРАГОВ": (
+        "WAVE {wave} · WARLORD AND {count} ENEMIES"
+    ),
+    "Пепельный след": "Ashen Trail",
+    "Пройди «Забытые руины»": "Clear the Forgotten Ruins",
+    "Владыка пепла": "Lord of Ashes",
+    "Пройди «Тёмную цитадель»": "Clear the Dark Citadel",
+    "Несокрушимый": "Unbreakable",
+    "Дойди до 25-й волны в бесконечном режиме": (
+        "Reach wave 25 in endless mode"
+    ),
+    "Истребитель": "Destroyer",
+    "Уничтожь 1000 врагов за всё время": "Destroy 1000 enemies in total",
+    "• Две новые карты: «Забытые руины» и «Тёмная цитадель»": (
+        "• Two new maps: Forgotten Ruins and Dark Citadel"
+    ),
+    "• Новые враги: берсерк, голем и некромант": (
+        "• New enemies: berserker, golem and necromancer"
+    ),
+    "• Тёмный владыка — финальный босс цитадели": (
+        "• The Dark Warlord — the Citadel's final boss"
+    ),
+    "• Четыре новых достижения": "• Four new achievements",
+    "• Крупные золотые жилы на новых картах": (
+        "• Rich gold veins on the new maps"
+    ),
+    "• Новый шрифт кнопок и обновлённое меню": (
+        "• A new button font and a refreshed menu"
+    ),
 }
 
 

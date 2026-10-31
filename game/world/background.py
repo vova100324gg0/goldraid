@@ -385,7 +385,7 @@ def build_background(group, level, detail: bool = True) -> None:
     samples = _samples(paths, 22.0)
     landmarks = [level.base_pos, *level.gold_spots, *[route[0] for route in paths]]
     theme = level.id
-    ash = theme in ("ash", "crater")
+    ash = theme in ("ash", "crater", "citadel")
     frost = theme == "frost"
     forest = theme == "forest"
 

@@ -21,6 +21,7 @@ from ..core.i18n import t
 from ..core.sfx import sfx
 from ..render.gfx import star
 from ..render.icons import draw_icon
+from .fonts import DISPLAY_FONT
 
 
 def _set_text(label: Label, text: str) -> None:
@@ -56,10 +57,13 @@ class GameButton(Button):
         # по вертикали (например, круглые кнопки HUD становились 46x58).
         if "height" not in kwargs and "size" not in kwargs:
             kwargs.setdefault("height", dp(58))
+        # Единый «игровой» шрифт для всех кнопок. Он шире Roboto, поэтому
+        # базовый размер чуть меньше — длинные подписи остаются в кнопке.
+        kwargs.setdefault("font_name", DISPLAY_FONT)
         super().__init__(
             text=text,
             bold=True,
-            font_size=font_size if font_size is not None else sp(17),
+            font_size=font_size if font_size is not None else sp(16),
             background_normal="",
             background_down="",
             background_color=(0, 0, 0, 0),
@@ -180,6 +184,46 @@ class GameButton(Button):
         else:
             self._base_bg = list(base)
         self._refresh_style()
+
+
+class RibbonLabel(Label):
+    """Подпись на золотой «ленточке»: тёмная плашка со скруглением."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("font_name", DISPLAY_FONT)
+        kwargs.setdefault("bold", True)
+        kwargs.setdefault("halign", "center")
+        kwargs.setdefault("valign", "middle")
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            self._ribbon_color = Color(0.06, 0.14, 0.11, 0.72)
+            self._ribbon = RoundedRectangle(
+                pos=self.pos, size=self.size, radius=[dp(9)]
+            )
+            self._ribbon_edge_color = Color(1.0, 0.84, 0.40, 0.36)
+            self._ribbon_edge = Line(
+                rounded_rectangle=(0, 0, 0, 0, dp(9)), width=dp(1.1)
+            )
+        self.bind(
+            pos=self._sync_ribbon,
+            size=self._sync_ribbon,
+            text=self._sync_ribbon,
+        )
+        self._sync_ribbon()
+
+    def _sync_ribbon(self, *_args) -> None:
+        if not hasattr(self, "_ribbon"):
+            return
+        pad_x = dp(10)
+        pad_y = dp(2)
+        x = self.x + pad_x
+        y = self.y + pad_y
+        w = max(1.0, self.width - pad_x * 2)
+        h = max(1.0, self.height - pad_y * 2)
+        self._ribbon.pos = (x, y)
+        self._ribbon.size = (w, h)
+        self._ribbon_edge.rounded_rectangle = (x, y, w, h, dp(8))
+        self.text_size = (max(1.0, self.width - dp(8)), self.height)
 
 
 class StarRow(Widget):

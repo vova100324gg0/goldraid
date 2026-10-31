@@ -79,6 +79,10 @@ class Enemy:
     waypoint: int = 1
     support_cd: float = 1.0
     attack_delay: float = 1.2
+    # Базовые значения для «ярости» берсерка: храним, чтобы возвращать
+    # характеристики обратно, когда враг снова стал крепким.
+    base_speed: float = 0.0
+    base_damage: float = 0.0
 
 
 @dataclass

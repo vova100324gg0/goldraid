@@ -40,7 +40,17 @@ from ..core.i18n import LANGUAGES, set_language, t
 from ..core.progress import PROGRESS
 from ..core.sfx import sfx
 from ..core.util import open_url
-from .widgets import BuildBar, GameButton, HUD, Overlay, StarRow, Toast, WavePrompt
+from .widgets import (
+    BuildBar,
+    GameButton,
+    HUD,
+    Overlay,
+    RibbonLabel,
+    StarRow,
+    Toast,
+    WavePrompt,
+)
+from .fonts import DISPLAY_FONT
 
 
 class Backdrop(FloatLayout):
@@ -73,6 +83,28 @@ class Backdrop(FloatLayout):
         ]
         self._spark_colors = []
         self._spark_ellipses = []
+        # Монеты, медленно плывущие вверх: оживляют фон и напоминают,
+        # за чем мы вообще здесь охотимся.
+        self._coins = [
+            {
+                "x": rng.uniform(0.03, 0.97),
+                "y": rng.random(),
+                "r": dp(rng.uniform(3.0, 6.5)),
+                "v": rng.uniform(0.006, 0.020),
+                "sway": rng.uniform(0.003, 0.012),
+                "sway_speed": rng.uniform(0.4, 1.1),
+                "phase": rng.uniform(0.0, math.tau),
+                "twinkle": rng.uniform(0.7, 1.6),
+                "alpha": rng.uniform(0.30, 0.68),
+            }
+            for _ in range(7)
+        ]
+        self._coin_rim_colors = []
+        self._coin_rims = []
+        self._coin_face_colors = []
+        self._coin_faces = []
+        self._coin_shine_colors = []
+        self._coin_shines = []
         with self.canvas.before:
             self._band_colors = []
             self._band_rects = []
@@ -109,6 +141,20 @@ class Backdrop(FloatLayout):
                 spark_ellipse = Ellipse()
                 self._spark_colors.append(spark_color)
                 self._spark_ellipses.append(spark_ellipse)
+
+            for coin in self._coins:
+                rim_color = Color(0.44, 0.28, 0.04, coin["alpha"] * 0.85)
+                rim = Ellipse()
+                face_color = Color(1.0, 0.79, 0.24, coin["alpha"])
+                face = Ellipse()
+                shine_color = Color(1.0, 0.96, 0.72, coin["alpha"] * 0.75)
+                shine = Ellipse()
+                self._coin_rim_colors.append(rim_color)
+                self._coin_rims.append(rim)
+                self._coin_face_colors.append(face_color)
+                self._coin_faces.append(face)
+                self._coin_shine_colors.append(shine_color)
+                self._coin_shines.append(shine)
         self.bind(pos=self._layout, size=self._layout)
         self._event = Clock.schedule_interval(self._animate, 1 / 30)
         self._layout()
@@ -192,6 +238,40 @@ class Backdrop(FloatLayout):
             twinkle = math.sin(time * spark["twinkle"] + spark["phase"])
             color.a = spark["alpha"] * (0.55 + 0.45 * twinkle * twinkle)
 
+    def _update_coins(self) -> None:
+        width, height = self.size
+        if width <= 0 or height <= 0:
+            return
+        time = self._t
+        for coin, rim_c, rim, face_c, face, shine_c, shine in zip(
+            self._coins,
+            self._coin_rim_colors,
+            self._coin_rims,
+            self._coin_face_colors,
+            self._coin_faces,
+            self._coin_shine_colors,
+            self._coin_shines,
+        ):
+            x = self.x + (
+                coin["x"]
+                + math.sin(time * coin["sway_speed"] + coin["phase"])
+                * coin["sway"]
+            ) % 1.0 * width
+            y = self.y + ((coin["y"] + time * coin["v"]) % 1.0) * height
+            pulse = 0.88 + 0.14 * math.sin(time * coin["twinkle"] + coin["phase"])
+            radius = coin["r"]
+            alpha = coin["alpha"] * pulse
+            rim_c.a = alpha * 0.85
+            face_c.a = alpha
+            shine_c.a = alpha * 0.75
+            rim.pos = (x - radius, y - radius)
+            rim.size = (radius * 2, radius * 2)
+            inner = radius * 0.78
+            face.pos = (x - inner, y - inner)
+            face.size = (inner * 2, inner * 2)
+            shine.pos = (x - radius * 0.45, y + radius * 0.05)
+            shine.size = (radius * 0.62, radius * 0.40)
+
     def _animate(self, dt: float) -> None:
         if not self.running:
             return
@@ -199,6 +279,7 @@ class Backdrop(FloatLayout):
         self._glow_color.a = 0.062 + 0.018 * math.sin(self._t * 0.9)
         self._glow_b_color.a = 0.035 + 0.012 * math.sin(self._t * 0.6 + 1.2)
         self._update_sparks()
+        self._update_coins()
 
 
 class CoinEmblem(Widget):
@@ -213,6 +294,38 @@ class CoinEmblem(Widget):
         self.bind(pos=self._redraw, size=self._redraw)
         self._redraw()
         Clock.schedule_once(lambda _dt: self._redraw(), 0)
+        # Три золотые искры медленно облетают монету.
+        self.running = True
+        self._t = 0.0
+        self._orbit_group = InstructionGroup()
+        self.canvas.add(self._orbit_group)
+        self._orbit_dots = []
+        for index in range(3):
+            dot_color = Color(1.0, 0.92, 0.55, 0.0)
+            dot = Ellipse()
+            self._orbit_group.add(dot_color)
+            self._orbit_group.add(dot)
+            self._orbit_dots.append((dot_color, dot, index))
+        self._orbit_event = Clock.schedule_interval(self._orbit_tick, 1 / 30)
+
+    def _orbit_tick(self, dt: float) -> None:
+        if not self.running:
+            return
+        self._t += dt
+        cx = self.x + self.width * 0.5
+        cy = self.y + self.height * 0.5
+        radius = min(self.width, self.height) * 0.5
+        if radius <= 1:
+            return
+        for dot_color, dot, index in self._orbit_dots:
+            angle = self._t * 0.9 + index * math.tau / 3.0
+            orbit = radius * 1.22
+            x = cx + math.cos(angle) * orbit
+            y = cy + math.sin(angle) * orbit
+            size = dp(2.0) + dp(1.1) * (0.5 + 0.5 * math.sin(angle * 2))
+            dot.pos = (x - size, y - size)
+            dot.size = (size * 2, size * 2)
+            dot_color.a = 0.45 + 0.35 * math.sin(angle * 1.7) ** 2
 
     def _redraw(self, *_args) -> None:
         group = self._group
@@ -1100,6 +1213,8 @@ class MenuScreen(Screen):
         self.app_ref = app_ref
         self.screen_manager = screen_manager
         self._discord_timer = None
+        self._fun_t = 0.0
+        self._fun_event = None
 
         self.backdrop = Backdrop()
         self.add_widget(self.backdrop)
@@ -1129,7 +1244,8 @@ class MenuScreen(Screen):
 
         title = Label(
             text=t(GAME_TITLE),
-            font_size=sp(30),
+            font_name=DISPLAY_FONT,
+            font_size=sp(31),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
             outline_color=(0.28, 0.14, 0.02, 0.65),
@@ -1142,19 +1258,17 @@ class MenuScreen(Screen):
         )
         title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         brand.add_widget(title)
+        self.title_label = title
 
-        tagline = Label(
+        tagline = RibbonLabel(
             text=t("ОБОРОНА · ВОЛНЫ · ЗОЛОТО"),
             font_size=sp(9.5),
-            bold=True,
-            color=(0.62, 0.78, 0.67, 0.95),
-            size_hint=(1, None),
-            height=dp(18),
+            color=(0.86, 0.94, 0.80, 0.96),
+            size_hint=(None, None),
+            width=dp(236),
+            height=dp(24),
             pos_hint={"center_x": 0.5, "y": 0.0},
-            halign="center",
-            valign="middle",
         )
-        tagline.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         brand.add_widget(tagline)
 
         self.column.add_widget(brand)
@@ -1310,13 +1424,31 @@ class MenuScreen(Screen):
 
     def on_enter(self) -> None:
         self.backdrop.running = True
+        self.emblem.running = True
         music.apply_settings(PROGRESS.music)
         music.play(MENU_THEME)
         sfx.apply_settings(PROGRESS.sfx)
         self.refresh_menu()
+        if self._fun_event is None:
+            self._fun_event = Clock.schedule_interval(self._fun_tick, 1 / 20)
 
     def on_leave(self) -> None:
         self.backdrop.running = False
+        self.emblem.running = False
+        if self._fun_event is not None:
+            self._fun_event.cancel()
+            self._fun_event = None
+
+    def _fun_tick(self, dt: float) -> None:
+        """Лёгкое «дыхание» заголовка: золото переливается, не мигает."""
+        self._fun_t += dt
+        wave = math.sin(self._fun_t * 1.4)
+        self.title_label.color = (
+            1.0,
+            0.82 + 0.06 * wave,
+            0.33 + 0.10 * wave,
+            1.0,
+        )
 
     def refresh_menu(self) -> None:
         if not PROGRESS.tutorial_done and PROGRESS.unlocked <= 1:

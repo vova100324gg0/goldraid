@@ -30,6 +30,7 @@ from ..core.config import (
     HERO_REGEN,
     HERO_RESPAWN,
     HERO_SPEED,
+    RICH_GOLD_VALUE,
     SELL_REFUND,
     SHOP_ITEMS,
     WAVE_REWARD,
@@ -183,6 +184,9 @@ class Arena(Widget):
         self.hero = Hero(level.base_pos[0], level.base_pos[1] - 88)
         for _ in range(GOLD_PILE_COUNT):
             self._spawn_pickup()
+        # Крупные жилы лежат на карте с самого начала и не исчезают.
+        for spot in level.rich_spots:
+            self.pickups.append(Coin(spot[0], spot[1], RICH_GOLD_VALUE))
         self.respawn_timer = 0.0
         self._shake = 0.0
         self.shake_x = 0.0
@@ -302,7 +306,9 @@ class Arena(Widget):
             return ""
         count = len(units)
         labels = []
-        if "boss" in units:
+        if "warlord" in units:
+            labels.append(t("владыка"))
+        elif "boss" in units:
             labels.append(t("босс"))
         elif "chief" in units:
             labels.append(t("вожак"))
@@ -311,6 +317,12 @@ class Arena(Widget):
             labels.append(t("шаманы"))
         if "Лучник" in kinds:
             labels.append(t("лучники"))
+        if "Голем" in kinds:
+            labels.append(t("големы"))
+        if "Некромант" in kinds:
+            labels.append(t("некроманты"))
+        if "Берсерк" in kinds:
+            labels.append(t("берсерки"))
         extra = (
             t(" · {labels}").format(labels=", ".join(labels)) if labels else ""
         )
@@ -946,6 +958,7 @@ class Arena(Widget):
             spot
             for spot in self.level.gold_spots
             if (round(spot[0]), round(spot[1])) not in used
+            and spot not in self.level.rich_spots
         ]
         if not free:
             return
@@ -982,6 +995,25 @@ class Arena(Widget):
             enemy.support_cd -= dt
             enemy.hit_flash = max(0.0, enemy.hit_flash - dt)
             enemy.aggro = max(0.0, enemy.aggro - dt)
+
+            # Берсерк свирепеет, когда теряет больше половины здоровья.
+            if enemy.kind == "berserker":
+                if enemy.base_speed <= 0:
+                    enemy.base_speed = enemy.speed
+                    enemy.base_damage = enemy.damage
+                if enemy.hp <= enemy.max_hp * 0.4:
+                    enemy.speed = enemy.base_speed * 1.35
+                    enemy.damage = enemy.base_damage * 1.30
+                else:
+                    enemy.speed = enemy.base_speed
+                    enemy.damage = enemy.base_damage
+
+            # Некромант призывает гоблинов, пока его не убили.
+            if enemy.kind == "necromancer" and enemy.support_cd <= 0:
+                if self._necromancer_summon(enemy):
+                    enemy.support_cd = 9.0
+                else:
+                    enemy.support_cd = 2.0
 
             # Шаман лечит соседей и не рвётся в бой.
             if enemy.heal > 0:
@@ -1051,6 +1083,30 @@ class Arena(Widget):
             healed = True
         if healed:
             self._add_ring(enemy.x, enemy.y + 10, 46, (0.58, 0.92, 0.46, 0.45))
+
+    def _necromancer_summon(self, enemy: Enemy) -> bool:
+        """Призывает пару гоблинов. True — если призыв состоялся."""
+        minions = sum(1 for other in self.enemies if other.kind == "grunt")
+        if minions >= 6:
+            return False
+        count = min(2, 6 - minions)
+        for _ in range(count):
+            x = clamp(enemy.x + random.uniform(-28, 28), 30, self.world_w - 30)
+            y = clamp(enemy.y + random.uniform(-28, 28), 30, self.world_h - 30)
+            minion = make_enemy(
+                "grunt", x, y, route=enemy.route, waypoint=enemy.waypoint
+            )
+            # Призванные слабее обычных: они не должны превращаться
+            # в бесконечный источник золота.
+            minion.hp *= 1.0 + 0.08 * max(0, self.wave - 1)
+            minion.max_hp = minion.hp
+            minion.gold = max(3, int(minion.gold * 0.5))
+            self.enemies.append(minion)
+        self._add_ring(enemy.x, enemy.y + 10, 34, (0.68, 0.42, 0.92, 0.55))
+        self._add_particles(
+            enemy.x, enemy.y + 14, 8, (0.74, 0.48, 0.96, 1), speed=55
+        )
+        return True
 
     def _combat_target(self, enemy: Enemy):
         """Ближайшая цель рядом или None — тогда враг идёт по дороге."""
@@ -1134,15 +1190,21 @@ class Arena(Widget):
         units: list[str] = []
         for _ in range(count):
             roll = random.random()
-            if wave >= 9 and roll < 0.10:
+            if wave >= 12 and roll < 0.06:
+                units.append("necromancer")
+            elif wave >= 9 and roll < 0.14:
+                units.append("golem")
+            elif wave >= 9 and roll < 0.21:
                 units.append("bomber")
-            elif wave >= 7 and roll < 0.22:
+            elif wave >= 7 and roll < 0.28:
                 units.append("shaman")
-            elif wave >= 5 and roll < 0.36:
+            elif wave >= 6 and roll < 0.40:
+                units.append("berserker")
+            elif wave >= 5 and roll < 0.50:
                 units.append("shield")
-            elif wave >= 4 and roll < 0.54:
+            elif wave >= 4 and roll < 0.62:
                 units.append("archer")
-            elif wave >= 3 and roll < 0.72:
+            elif wave >= 3 and roll < 0.76:
                 units.append("brute")
             elif wave >= 2 and roll < 0.88:
                 units.append("runner")
@@ -1153,11 +1215,16 @@ class Arena(Widget):
         if wave % 2 == 0 and (endless or wave < total):
             units.append("chief")
         if endless:
-            # В бесконечном режиме босс приходит каждые 5 волн.
-            if wave % 5 == 0:
+            # В бесконечном режиме босс приходит каждые 5 волн, а после
+            # 20-й — реже, чтобы передышка была длиннее.
+            if wave <= 20:
+                boss_wave = wave % 5 == 0
+            else:
+                boss_wave = (wave - 20) % 6 == 0
+            if boss_wave:
                 units.append("boss")
         elif wave >= total:
-            units.append("boss")
+            units.append(self.level.boss_kind)
         return units
 
     def _start_wave(self, bonus: int = 0) -> None:
@@ -1170,7 +1237,11 @@ class Arena(Widget):
         label = t("ВОЛНА {wave} · врагов: {count}").format(
             wave=self.wave, count=count
         )
-        if "boss" in self.pending:
+        if "warlord" in self.pending:
+            label = t("ВОЛНА {wave} · ВЛАДЫКА И {count} ВРАГОВ").format(
+                wave=self.wave, count=count - 1
+            )
+        elif "boss" in self.pending:
             label = t("ВОЛНА {wave} · БОСС И {count} ВРАГОВ").format(
                 wave=self.wave, count=count - 1
             )
@@ -1211,7 +1282,12 @@ class Arena(Widget):
 
         wave = self.wave
         diff = self.level.difficulty
-        hp_scale = diff * (1 + 0.16 * (wave - 1) + 0.013 * (wave - 1) ** 2)
+        # Кривая здоровья мягче прежней: квадратичный рост ограничен,
+        # иначе бесконечный режим превращается в стену из губки.
+        hp_scale = min(
+            20.0,
+            diff * (1 + 0.14 * (wave - 1) + 0.010 * (wave - 1) ** 2),
+        )
         enemy.hp *= hp_scale
         enemy.max_hp = enemy.hp
         enemy.damage *= diff * (1 + 0.075 * (wave - 1))
@@ -1219,7 +1295,7 @@ class Arena(Widget):
         enemy.gold = int(enemy.gold * (1 + 0.06 * (wave - 1)))
 
         # Редкий элитный враг: крепче, злее и вдвое дороже.
-        if not enemy.boss and wave >= 5 and random.random() < 0.10:
+        if not enemy.boss and wave >= 8 and random.random() < 0.12:
             enemy.elite = True
             enemy.hp *= 1.7
             enemy.max_hp = enemy.hp
@@ -1228,7 +1304,10 @@ class Arena(Widget):
             enemy.gold *= 2
 
         self.enemies.append(enemy)
-        if kind == "boss":
+        if kind == "warlord":
+            self.on_toast(t("ТЁМНЫЙ ВЛАДЫКА ПРОБУДИЛСЯ!"), "bad")
+            self._shake = 16.0
+        elif kind == "boss":
             self.on_toast(t("АЛЫЙ БОСС ВЕДЁТ АРМИЮ!"), "bad")
             self._shake = 12.0
         elif kind == "chief":

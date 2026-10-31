@@ -63,8 +63,32 @@ ACHIEVEMENTS: list[dict] = [
     {
         "id": "all_maps",
         "name": "Покоритель карт",
-        "desc": "Пройди все шесть карт",
+        "desc": "Пройди все карты",
         "check": lambda p, run: _all_maps(p),
+    },
+    {
+        "id": "ruins_win",
+        "name": "Пепельный след",
+        "desc": "Пройди «Забытые руины»",
+        "check": lambda p, run: bool(p.best.get("ruins", {}).get("win", False)),
+    },
+    {
+        "id": "citadel_win",
+        "name": "Владыка пепла",
+        "desc": "Пройди «Тёмную цитадель»",
+        "check": lambda p, run: bool(p.best.get("citadel", {}).get("win", False)),
+    },
+    {
+        "id": "endless_25",
+        "name": "Несокрушимый",
+        "desc": "Дойди до 25-й волны в бесконечном режиме",
+        "check": lambda p, run: int(p.endless_best) >= 25,
+    },
+    {
+        "id": "kills_1000",
+        "name": "Истребитель",
+        "desc": "Уничтожь 1000 врагов за всё время",
+        "check": lambda p, run: int(p.counters.get("kills", 0)) >= 1000,
     },
 ]
 

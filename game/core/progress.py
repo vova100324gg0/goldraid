@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from ..world.levels import LEVELS
 
 # Версия формата сохранения. При изменении структуры старые файлы
 # дочитываются значениями по умолчанию, а не теряются.
-SAVE_VERSION = 3
+SAVE_VERSION = 4
 
 DEFAULT_COUNTERS = {
     "runs": 0,
@@ -20,6 +20,8 @@ DEFAULT_COUNTERS = {
     "buildings": 0,
     "gold": 0,
     "waves": 0,
+    "kills": 0,
+    "daily_wins": 0,
 }
 
 
@@ -55,7 +57,13 @@ class Progress:
         self.counters = dict(DEFAULT_COUNTERS)
         # Рекорды режимов: бесконечный и ежедневная карта.
         self.endless_best = 0
-        self.daily: dict = {"date": "", "best": 0, "done": False, "win": False}
+        self.daily: dict = {
+            "date": "",
+            "best": 0,
+            "done": False,
+            "win": False,
+            "streak": 0,
+        }
         self.load()
 
     # ------------------------------------------------------------------
@@ -114,7 +122,19 @@ class Progress:
                 "best": best,
                 "done": bool(daily.get("done", False)),
                 "win": bool(daily.get("win", False)),
+                "streak": max(0, int(daily.get("streak", 0))),
             }
+        # Карты, добавленные в обновлении, открываются тем, кто уже прошёл
+        # предыдущую: переигрывать старую карту не нужно.
+        won = [
+            index
+            for index, level in enumerate(LEVELS)
+            if bool(self.best.get(level.id, {}).get("win", False))
+        ]
+        if won:
+            self.unlocked = max(
+                self.unlocked, min(len(LEVELS), max(won) + 2)
+            )
         # Старый файл без версии — просто миграция: все поля уже с
         # значениями по умолчанию, а прогресс карт сохранён.
         try:
@@ -204,7 +224,19 @@ class Progress:
         """Результат ежедневной карты за сегодня; сбрасывается на новый день."""
         today = self.today()
         if self.daily.get("date") != today:
-            self.daily = {"date": today, "best": 0, "done": False, "win": False}
+            yesterday = (date.today() - timedelta(days=1)).isoformat()
+            streak = int(self.daily.get("streak", 0))
+            if bool(self.daily.get("win", False)) and self.daily.get("date") == yesterday:
+                streak += 1
+            else:
+                streak = 0
+            self.daily = {
+                "date": today,
+                "best": 0,
+                "done": False,
+                "win": False,
+                "streak": streak,
+            }
             self.save()
         return self.daily
 
@@ -213,9 +245,14 @@ class Progress:
 
     def record_daily(self, waves: int, win: bool) -> None:
         entry = self.daily_of_today()
+        was_win = bool(entry.get("win", False))
         entry["best"] = max(int(entry.get("best", 0)), max(0, int(waves)))
         entry["done"] = True
-        entry["win"] = bool(entry.get("win", False)) or bool(win)
+        entry["win"] = was_win or bool(win)
+        if win and not was_win:
+            self.counters["daily_wins"] = (
+                int(self.counters.get("daily_wins", 0)) + 1
+            )
         self.daily = entry
         self.save()
 
@@ -254,6 +291,7 @@ class Progress:
         self.counters["buildings"] += max(0, int(run.get("buildings_built", 0)))
         self.counters["gold"] += max(0, int(run.get("gold_earned", 0)))
         self.counters["waves"] += max(0, int(run.get("waves", 0)))
+        self.counters["kills"] += max(0, int(run.get("kills", 0)))
         self.save()
 
     def record(
@@ -296,7 +334,7 @@ class Progress:
         self.seen_version = ""
         self.counters = dict(DEFAULT_COUNTERS)
         self.endless_best = 0
-        self.daily = {"date": "", "best": 0, "done": False, "win": False}
+        self.daily = {"date": "", "best": 0, "done": False, "win": False, "streak": 0}
         self.version = SAVE_VERSION
         self.save()
 

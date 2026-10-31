@@ -22,6 +22,8 @@ THEME_BY_LEVEL = {
     "ash": "ash",
     "frost": "frost",
     "crater": "ember",
+    "ruins": "stone",
+    "citadel": "ember",
 }
 
 MENU_THEME = "menu"

@@ -8,12 +8,12 @@ package.name = goldraid
 package.domain = org.goldraid
 
 # Версия видна в настройках Android.
-version = 1.4.0
+version = 1.5.0
 
 # Что попадает в APK.
 source.dir = .
-source.include_exts = py,png,jpg,jpeg,kv,atlas,json,txt,wav
-source.include_patterns = game/*.py,game/*/*.py,game/assets/music/*.wav,game/assets/sfx/*.wav,main.py,icon.png,presplash.png
+source.include_exts = py,png,jpg,jpeg,kv,atlas,json,txt,wav,ttf
+source.include_patterns = game/*.py,game/*/*.py,game/assets/music/*.wav,game/assets/sfx/*.wav,game/assets/fonts/*.ttf,game/assets/fonts/*.txt,main.py,icon.png,presplash.png
 source.exclude_dirs = .venv,.git,.github,.buildozer,bin,apk,build,__pycache__,Сборка,.idea,.vscode
 source.exclude_patterns = *.pyc,*.pyo,*.apk,*.aab,*.spec.bak,README.md,СБОРКА APK.txt
 
