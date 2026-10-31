@@ -69,12 +69,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Приложить APK к релизу (для тегов v*)
+      - name: Приложить APK к публичному релизу
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          repository: vova100324gg0/goldraid-downloads
+          token: ${{ secrets.RELEASE_TOKEN }}
+          name: "Золотой рейд ${{ github.ref_name }}"
+          body: |
+            Сборка ${{ github.ref_name }}.
+            Android: APK, Windows: ZIP.
+          make_latest: true
           files: ${{ steps.apk.outputs.filename }}
-          generate_release_notes: true
 
   windows:
     name: Build Windows build
@@ -108,8 +114,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Приложить архив к релизу (для тегов v*)
+      - name: Приложить архив к публичному релизу
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          repository: vova100324gg0/goldraid-downloads
+          token: ${{ secrets.RELEASE_TOKEN }}
+          name: "Золотой рейд ${{ github.ref_name }}"
+          body: |
+            Сборка ${{ github.ref_name }}.
+            Android: APK, Windows: ZIP.
+          make_latest: true
           files: build/windows/goldraid-1.2.0-windows.zip
