@@ -19,7 +19,7 @@ apk/*.apk
 Thumbs.db
 desktop.ini
 
-# Личный адрес телевизора для tv-adb.cmd
+# Личный адрес телевизора для ADB
 tv-ip.txt
 
 # Отчёты автотестов

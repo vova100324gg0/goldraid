@@ -75,8 +75,7 @@ Linux-окружения нет, поэтому локально собрать 
 - Телефон: скопируйте APK, откройте файл, разрешите установку
   из неизвестных источников.
 - Телевизор (например, Philips на Android TV): подключите ADB и выполните
-       tv-adb.cmd install apk\goldraid-1.7.0-arm64-v8a_armeabi-v7a-debug.apk
-  Или: adb connect <IP_ТЕЛЕВИЗОРА>:5555
+       adb connect <IP_ТЕЛЕВИЗОРА>:5555
        adb install -r apk\goldraid-1.7.0-arm64-v8a_armeabi-v7a-debug.apk
 
 APK собран в режиме debug — для установки на свои устройства этого
