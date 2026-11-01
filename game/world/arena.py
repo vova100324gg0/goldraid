@@ -80,6 +80,15 @@ BUILD_TAP_RADIUS = 110.0
 # вместо перебора всей орды.
 TARGET_CELL = 128.0
 
+# Боец из казармы охраняет участок вокруг неё (DEFENDER_LEASH) и при этом
+# по-прежнему помогает базе в прежнем радиусе (DEFENDER_BASE_RADIUS).
+# Раньше проверка была только по базе — на дальних площадках (Руины,
+# Цитадель и другие карты) казармы из-за этого вообще не реагировали
+# на врагов рядом с собой.
+DEFENDER_RANGE = 250.0
+DEFENDER_LEASH = 320.0
+DEFENDER_BASE_RADIUS = 560.0
+
 # --- Баланс поздних волн (1.8.0) -------------------------------------------
 # Защита игрока упирается в потолок: постройки максимум 5 уровня, общие
 # улучшения — 8. Если враги растут без предела, длинные карты (Кратер,
@@ -1028,15 +1037,17 @@ class Arena(Widget):
         grid = self._enemy_grid_fresh()
         cell = TARGET_CELL
         bx, by = self.level.base_pos
-        base_limit2 = 560.0 * 560.0
+        base_limit2 = DEFENDER_BASE_RADIUS * DEFENDER_BASE_RADIUS
+        home_x, home_y = defender.home_x, defender.home_y
+        leash2 = DEFENDER_LEASH * DEFENDER_LEASH
         dx0, dy0 = defender.x, defender.y
         best = None
-        best_d2 = 250.0 * 250.0
-        # Смотрим только клетки, пересекающие квадрат радиуса 250.
-        gx0 = int((dx0 - 250.0) // cell)
-        gx1 = int((dx0 + 250.0) // cell)
-        gy0 = int((dy0 - 250.0) // cell)
-        gy1 = int((dy0 + 250.0) // cell)
+        best_d2 = DEFENDER_RANGE * DEFENDER_RANGE
+        # Смотрим только клетки, пересекающие квадрат радиуса DEFENDER_RANGE.
+        gx0 = int((dx0 - DEFENDER_RANGE) // cell)
+        gx1 = int((dx0 + DEFENDER_RANGE) // cell)
+        gy0 = int((dy0 - DEFENDER_RANGE) // cell)
+        gy1 = int((dy0 + DEFENDER_RANGE) // cell)
         for gx in range(gx0, gx1 + 1):
             for gy in range(gy0, gy1 + 1):
                 bucket = grid.get((gx, gy))
@@ -1045,10 +1056,16 @@ class Arena(Widget):
                 for enemy in bucket:
                     if enemy.hp <= 0:
                         continue
-                    bdx = enemy.x - bx
-                    bdy = enemy.y - by
-                    if bdx * bdx + bdy * bdy > base_limit2:
-                        continue
+                    # Не уходим далеко от казармы: иначе боец может
+                    # увязаться за врагом через полкарты. Исключение —
+                    # прежняя зона защиты базы.
+                    hdx = enemy.x - home_x
+                    hdy = enemy.y - home_y
+                    if hdx * hdx + hdy * hdy > leash2:
+                        bdx = enemy.x - bx
+                        bdy = enemy.y - by
+                        if bdx * bdx + bdy * bdy > base_limit2:
+                            continue
                     ddx = enemy.x - dx0
                     ddy = enemy.y - dy0
                     d2 = ddx * ddx + ddy * ddy

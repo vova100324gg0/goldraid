@@ -784,6 +784,9 @@ EN: dict[str, str] = {
     "• Горячие клавиши не срабатывают под открытыми окнами боя": (
         "• Hotkeys no longer fire while battle windows are open"
     ),
+    "• Бойцы из казармы на дальних площадках снова реагируют на врагов": (
+        "• Barracks fighters on distant slots now engage nearby enemies"
+    ),
     # --- что нового 1.8.0 ------------------------------------------------
     "• Постройки качаются до 5 уровня — поздние волны больше не стена": (
         "• Buildings upgrade to level 5 — late waves are no longer a wall"
