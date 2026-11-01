@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 
 from kivy.clock import Clock
@@ -32,7 +33,7 @@ from ..core.config import (
     UI_MUTED,
     VERSION,
 )
-from ..render.gfx import circle, poly, ring
+from ..render.gfx import circle, ellipse, poly, rect, ring, rounds
 from ..world.levels import LEVELS, TUTORIAL, TUTORIAL_HINTS
 from ..core.achievements import ACHIEVEMENTS, check_achievements, unlocked_count
 from ..core.audio import MENU_THEME, THEME_BY_LEVEL, music
@@ -40,6 +41,7 @@ from ..core.changelog import CHANGELOG, latest_version
 from ..core.i18n import LANGUAGES, set_language, t
 from ..core.progress import PROGRESS
 from ..core.sfx import sfx
+from ..core.story import CITADEL_ID, INTRO, SPEAKERS, campaigns_for, epilogue_for
 from ..core.util import open_url
 from .widgets import (
     BuildBar,
@@ -51,6 +53,7 @@ from .widgets import (
     StarRow,
     Toast,
     WavePrompt,
+    content_width,
 )
 from .fonts import DISPLAY_FONT
 
@@ -60,6 +63,17 @@ def _format_duration(seconds: float) -> str:
     total = max(0, int(round(seconds)))
     minutes, secs = divmod(total, 60)
     return f"{minutes}:{secs:02d}"
+
+
+def story_enabled() -> bool:
+    """Сюжет в кампании: после обучения и не отключён для тестов.
+
+    Обучение — это пролог: пока оно не пройдено, кампания идёт без
+    катсцен. Переменная ``GOLDRAID_NO_STORY`` выключает сюжет в тестах.
+    """
+    if os.environ.get("GOLDRAID_NO_STORY"):
+        return False
+    return bool(PROGRESS.tutorial_done)
 
 
 class Backdrop(FloatLayout):
@@ -512,6 +526,13 @@ class Medallion(Widget):
         self._redraw()
 
     def _redraw(self, *_args) -> None:
+        # Номер рисуется дочерним Label, а обычный Widget не управляет
+        # размерами детей: без этого лейбл оставался 100×100 и цифра
+        # «улетала» из кружка, оставляя его пустым. Прижимаем лейбл к
+        # границам медальона вручную.
+        self.number.pos = (0, 0)
+        self.number.size = (self.width, self.height)
+        self.number.text_size = (self.width, self.height)
         group = self._group
         group.clear()
         cx = self.x + self.width * 0.5
@@ -1375,6 +1396,8 @@ class MenuScreen(Screen):
             padding=(dp(14), 0, dp(14), 0),
         )
         self.scroll.add_widget(self.column)
+        self.bind(size=self._fit_width)
+        Clock.schedule_once(lambda _dt: self._fit_width(), 0)
 
         # ---------------------------------------------------------- бренд
         # Emblem сверху, затем название и лента. Отступ сверху задаёт
@@ -1596,6 +1619,19 @@ class MenuScreen(Screen):
         widget.pos_hint = {"center_x": 0.5, "center_y": 0.5}
         box.add_widget(widget)
         return box
+
+    def _fit_width(self, *_args) -> None:
+        """Держит меню «телефонной» ширины по центру большого окна."""
+        width = content_width(self.width)
+        x = (self.width - width) * 0.5
+        self.scroll.size_hint = (None, 1)
+        self.scroll.size = (width, self.height)
+        self.scroll.pos = (x, 0)
+        bar_h = self.bottom_bar.height
+        self.bottom_bar.size_hint = (None, None)
+        self.bottom_bar.size = (width, bar_h)
+        # Панель центрируем через pos_hint: ручной pos перезапишет раскладка.
+        self.bottom_bar.pos_hint = {"center_x": 0.5, "y": 0}
 
     def _fit_column(self, *_args) -> None:
         """Даёт бренду воздух сверху, а лишнее место отдаёт низу.
@@ -1839,7 +1875,7 @@ class LevelsScreen(Screen):
         )
         self.add_widget(self.scroll)
 
-        self._base_height = dp(420) + self._levels_block()
+        self._base_height = dp(348) + self._levels_block()
         self.column = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
@@ -1847,6 +1883,8 @@ class LevelsScreen(Screen):
             padding=(dp(13), 0, dp(13), 0),
         )
         self.scroll.add_widget(self.column)
+        self.bind(size=self._fit_width)
+        Clock.schedule_once(lambda _dt: self._fit_width(), 0)
 
         # ---------------------------------------------------------- шапка
         top = BoxLayout(
@@ -1891,64 +1929,18 @@ class LevelsScreen(Screen):
         )
         self.tutorial_button.bind(on_release=self._play_tutorial)
         self.column.add_widget(self.tutorial_button)
-        self.column.add_widget(Widget(size_hint_y=None, height=dp(12)))
+        self.column.add_widget(Widget(size_hint_y=None, height=dp(10)))
 
-        # ---------------------------------------------------------- режимы
-        self.modes_card = MenuCard(
-            orientation="vertical",
-            size_hint_y=None,
-            height=dp(116),
-            padding=(dp(12), dp(10)),
-            spacing=dp(6),
-        )
-        modes_header = BoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(20),
-            spacing=dp(6),
-        )
-        modes_title = Label(
-            text=t("РЕЖИМЫ"),
-            font_size=sp(11),
-            bold=True,
-            color=(1.0, 0.84, 0.40, 1),
-            halign="left",
-            valign="middle",
-        )
-        modes_title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
-        modes_header.add_widget(modes_title)
-        self.modes_card.add_widget(modes_header)
-
-        modes_row = BoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(56),
-            spacing=dp(8),
-        )
-        self.endless_button = GameButton(
-            text="",
-            color=(0.26, 0.24, 0.52, 1),
-            text_color=(0.94, 0.93, 1.0, 1),
-            height=dp(56),
+        self.story_button = GameButton(
+            text=t("СЮЖЕТ · вступление и путь героя"),
+            color=(0.20, 0.24, 0.42, 1),
+            text_color=(0.92, 0.94, 1.0, 1),
+            height=dp(46),
             radius=13,
-            font_size=sp(10.5),
+            font_size=sp(11.5),
         )
-        self.endless_button.bind(on_release=self._play_endless)
-        modes_row.add_widget(self.endless_button)
-
-        self.daily_button = GameButton(
-            text="",
-            color=(0.18, 0.40, 0.38, 1),
-            text_color=(0.90, 1.0, 0.96, 1),
-            height=dp(56),
-            radius=13,
-            font_size=sp(10.5),
-        )
-        self.daily_button.bind(on_release=self._play_daily)
-        modes_row.add_widget(self.daily_button)
-
-        self.modes_card.add_widget(modes_row)
-        self.column.add_widget(self.modes_card)
+        self.story_button.bind(on_release=self._play_story)
+        self.column.add_widget(self.story_button)
         self.column.add_widget(Widget(size_hint_y=None, height=dp(12)))
 
         # ---------------------------------------------------------- карты
@@ -2000,12 +1992,22 @@ class LevelsScreen(Screen):
         Clock.schedule_once(self._fit_column, 0)
         Clock.schedule_once(lambda _dt: self.refresh_levels(), 0)
 
+        self.story = CutsceneOverlay()
+        self.add_widget(self.story)
+
     # ------------------------------------------------------------------
     @staticmethod
     def _levels_block() -> float:
         """Высота карточки со списком карт (растёт с числом карт)."""
         count = max(1, len(LEVELS))
         return dp(24) + count * dp(110) + count * dp(8) + dp(24)
+
+    def _fit_width(self, *_args) -> None:
+        """Держит список карт «телефонной» ширины по центру окна."""
+        width = content_width(self.width)
+        self.scroll.size_hint = (None, 1)
+        self.scroll.size = (width, self.height)
+        self.scroll.pos = ((self.width - width) * 0.5, 0)
 
     def _fit_column(self, *_args) -> None:
         """Растягивает колонку на всю высоту и делит лишнее место на отступы."""
@@ -2050,22 +2052,6 @@ class LevelsScreen(Screen):
                 "ОБУЧЕНИЕ · короткая карта\n"
                 "движение · золото · первая башня"
             )
-        best = int(PROGRESS.endless_best)
-        if best > 0:
-            self.endless_button.text = t(
-                "БЕСКОНЕЧНЫЙ РЕЖИМ\nрекорд: волна {n}"
-            ).format(n=best)
-        else:
-            self.endless_button.text = t("БЕСКОНЕЧНЫЙ РЕЖИМ\nбез конца волн")
-        daily = PROGRESS.daily_of_today()
-        if daily.get("done"):
-            self.daily_button.text = t(
-                "ЕЖЕДНЕВНАЯ КАРТА\nпройдена · волна {n}"
-            ).format(n=int(daily.get("best", 0)))
-            self.daily_button.disabled = True
-        else:
-            self.daily_button.text = t("ЕЖЕДНЕВНАЯ КАРТА\nновая карта дня")
-            self.daily_button.disabled = False
 
     def _back(self, *_args) -> None:
         self.screen_manager.current = "menu"
@@ -2077,22 +2063,16 @@ class LevelsScreen(Screen):
         game.start_level(index)
         self.screen_manager.current = "game"
 
-    def _play_endless(self, *_args) -> None:
-        game = self.screen_manager.get_screen("game")
-        game.start_endless()
-        self.screen_manager.current = "game"
-
-    def _play_daily(self, *_args) -> None:
-        if PROGRESS.daily_done():
-            return
-        game = self.screen_manager.get_screen("game")
-        game.start_daily()
-        self.screen_manager.current = "game"
-
     def _play_tutorial(self, *_args) -> None:
         game = self.screen_manager.get_screen("game")
         game.start_tutorial()
         self.screen_manager.current = "game"
+
+    def _play_story(self, *_args) -> None:
+        """Повторный показ вступления — по кнопке «СЮЖЕТ»."""
+        self.story.play(
+            INTRO, chapter=t("ВСТУПЛЕНИЕ"), final_label=t("ПОНЯТНО")
+        )
 
 
 class PauseOverlay(Overlay):
@@ -2625,6 +2605,297 @@ class EndOverlay(Overlay):
         self.visible = True
 
 
+class StoryPortrait(Widget):
+    """Портрет говорящего: силуэт, нарисованный примитивами."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(140), dp(140)))
+        super().__init__(**kwargs)
+        self._key = "hero"
+        self._accent = SPEAKERS["hero"][1]
+        self._group = InstructionGroup()
+        self.canvas.add(self._group)
+        self.bind(pos=self._redraw, size=self._redraw)
+        self._redraw()
+
+    def set_speaker(self, key) -> None:
+        self._key = key
+        if key is None:
+            self._accent = (0.86, 0.72, 0.38)
+        else:
+            self._accent = SPEAKERS.get(key, SPEAKERS["hero"])[1]
+        self._redraw()
+
+    def _redraw(self, *_args) -> None:
+        group = self._group
+        group.clear()
+        if self.width <= 1 or self.height <= 1:
+            return
+        cx = self.x + self.width * 0.5
+        cy = self.y + self.height * 0.5
+        r = min(self.width, self.height) * 0.5 * 0.94
+        accent = self._accent
+        # Свечение, диск и двойная окантовка.
+        circle(group, cx, cy, r * 1.10, (accent[0], accent[1], accent[2], 0.15))
+        circle(group, cx, cy, r, (0.045, 0.085, 0.065, 0.97))
+        ring(group, cx, cy, r, (accent[0], accent[1], accent[2], 0.90), width=2.2)
+        ring(
+            group, cx, cy, r * 0.86,
+            (accent[0], accent[1], accent[2], 0.20), width=1.0,
+        )
+        if self._key is None:
+            self._draw_coin(group, cx, cy, r)
+            return
+        human = self._key in ("hero", "elder", "scout")
+        body = (accent[0] * 0.52, accent[1] * 0.52, accent[2] * 0.52, 1.0)
+        skin = (0.92, 0.73, 0.60, 1.0) if human else (0.60, 0.54, 0.50, 1.0)
+        # Плечи и голова.
+        ellipse(group, cx, cy - r * 0.52, r * 1.55, r * 1.15, body)
+        circle(group, cx, cy + r * 0.18, r * 0.40, skin)
+        poly(
+            group,
+            (
+                (cx - r * 0.42, cy + r * 0.30),
+                (cx, cy + r * 0.64),
+                (cx + r * 0.42, cy + r * 0.30),
+            ),
+            body,
+        )
+        if self._key == "warlord":
+            poly(
+                group,
+                (
+                    (cx - r * 0.50, cy + r * 0.42),
+                    (cx - r * 0.80, cy + r * 0.88),
+                    (cx - r * 0.26, cy + r * 0.58),
+                ),
+                (accent[0], accent[1], accent[2], 1.0),
+            )
+            poly(
+                group,
+                (
+                    (cx + r * 0.50, cy + r * 0.42),
+                    (cx + r * 0.80, cy + r * 0.88),
+                    (cx + r * 0.26, cy + r * 0.58),
+                ),
+                (accent[0], accent[1], accent[2], 1.0),
+            )
+        elif self._key == "chief":
+            poly(
+                group,
+                (
+                    (cx - r * 0.34, cy + r * 0.30),
+                    (cx - r * 0.74, cy + r * 0.54),
+                    (cx - r * 0.34, cy + r * 0.52),
+                ),
+                (accent[0], accent[1], accent[2], 1.0),
+            )
+            poly(
+                group,
+                (
+                    (cx + r * 0.34, cy + r * 0.30),
+                    (cx + r * 0.74, cy + r * 0.54),
+                    (cx + r * 0.34, cy + r * 0.52),
+                ),
+                (accent[0], accent[1], accent[2], 1.0),
+            )
+
+    @staticmethod
+    def _draw_coin(group, cx, cy, r) -> None:
+        """Рассказчик говорит «от автора» — показываем золотую монету."""
+        circle(group, cx, cy, r * 0.70, (1.0, 0.79, 0.24, 1.0))
+        ring(group, cx, cy, r * 0.70, (0.55, 0.36, 0.06, 0.9), width=2.0)
+        circle(group, cx, cy, r * 0.48, (1.0, 0.88, 0.44, 1.0))
+        poly(
+            group,
+            (
+                (cx - r * 0.24, cy - r * 0.02),
+                (cx - r * 0.11, cy + r * 0.22),
+                (cx, cy + r * 0.02),
+                (cx + r * 0.11, cy + r * 0.22),
+                (cx + r * 0.24, cy - r * 0.02),
+            ),
+            (0.58, 0.39, 0.07, 1.0),
+        )
+
+
+class CutsceneOverlay(Overlay):
+    """Полноэкранная катсцена: фон, портрет говорящего и реплики по очереди."""
+
+    dim_alpha = 0.9
+
+    def __init__(self, on_finish=None, **kwargs):
+        super().__init__(**kwargs)
+        self.on_finish = on_finish or (lambda: None)
+        self._lines: list = []
+        self._index = 0
+        self._mark_keys: list = []
+        self._final_label = ""
+
+        self.backdrop = Backdrop()
+        self.backdrop.running = False
+        self.add_widget(self.backdrop)
+
+        self.chapter = Label(
+            text="",
+            font_size=sp(12),
+            bold=True,
+            color=(1.0, 0.84, 0.40, 1),
+            size_hint=(1, None),
+            height=dp(22),
+            pos_hint={"center_x": 0.5, "top": 0.985},
+            halign="center",
+            valign="middle",
+        )
+        self.chapter.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        self.add_widget(self.chapter)
+
+        self.portrait = StoryPortrait()
+        self.portrait.pos_hint = {"center_x": 0.5, "center_y": 0.60}
+        self.add_widget(self.portrait)
+
+        panel = MenuCard(
+            orientation="vertical",
+            size_hint=(0.93, None),
+            height=dp(252),
+            pos_hint={"center_x": 0.5, "y": 0.05},
+            padding=(dp(18), dp(14)),
+            spacing=dp(6),
+        )
+        self.name_label = Label(
+            text="",
+            font_size=sp(16),
+            bold=True,
+            color=(1.0, 0.84, 0.40, 1),
+            size_hint_y=None,
+            height=dp(26),
+            halign="left",
+            valign="middle",
+        )
+        self.name_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        panel.add_widget(self.name_label)
+
+        self.text_label = Label(
+            text="",
+            font_size=sp(14),
+            color=(0.93, 0.97, 0.92, 1),
+            halign="left",
+            valign="top",
+        )
+        self.text_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        panel.add_widget(self.text_label)
+
+        self.progress_label = Label(
+            text="",
+            font_size=sp(10.5),
+            color=(0.62, 0.76, 0.66, 1),
+            size_hint_y=None,
+            height=dp(18),
+            halign="right",
+            valign="middle",
+        )
+        self.progress_label.bind(
+            size=lambda w, _v: setattr(w, "text_size", w.size)
+        )
+        panel.add_widget(self.progress_label)
+
+        buttons = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(46),
+            spacing=dp(8),
+        )
+        self.skip_button = GameButton(
+            t("ПРОПУСТИТЬ"),
+            color=(0.24, 0.20, 0.14, 1),
+            text_color=(0.94, 0.90, 0.80, 1),
+            radius=12,
+            font_size=sp(11.5),
+        )
+        self.skip_button.bind(on_release=self._skip)
+        buttons.add_widget(self.skip_button)
+        self.next_button = GameButton(
+            t("ДАЛЕЕ"),
+            color=(0.16, 0.52, 0.30, 1),
+            radius=12,
+            font_size=sp(12),
+        )
+        self.next_button.bind(on_release=self.advance)
+        buttons.add_widget(self.next_button)
+        panel.add_widget(buttons)
+
+        self.add_panel(panel)
+
+    # ------------------------------------------------------------------
+    def play(self, lines, chapter="", final_label="", mark_keys=None) -> None:
+        """Показывает сцену. ``lines`` — список пар (говорящий, текст)."""
+        self._lines = [line for line in lines if line and line[1]]
+        if not self._lines:
+            self.on_finish()
+            return
+        self._index = 0
+        self._final_label = final_label or t("ПРОДОЛЖИТЬ")
+        self._mark_keys = list(mark_keys or [])
+        self.chapter.text = chapter
+        self.backdrop.running = True
+        self.visible = True
+        self._show_line()
+
+    def _show_line(self) -> None:
+        who, text = self._lines[self._index]
+        self.portrait.set_speaker(who)
+        if who is None:
+            self.name_label.text = t("Рассказчик")
+            self.name_label.color = (0.88, 0.78, 0.50, 1)
+            self.text_label.color = (0.86, 0.90, 0.86, 1)
+        else:
+            name, accent = SPEAKERS.get(who, SPEAKERS["hero"])
+            self.name_label.text = t(name)
+            self.name_label.color = (accent[0], accent[1], accent[2], 1)
+            self.text_label.color = (0.95, 0.97, 0.93, 1)
+        self.text_label.text = t(text)
+        total = len(self._lines)
+        self.progress_label.text = "{current} / {total}".format(
+            current=self._index + 1, total=total
+        )
+        self.next_button.text = (
+            self._final_label if self._index + 1 >= total else t("ДАЛЕЕ")
+        )
+
+    def advance(self, *_args) -> None:
+        if not self.visible:
+            return
+        if self._index + 1 < len(self._lines):
+            self._index += 1
+            self._show_line()
+            return
+        self._finish()
+
+    def _skip(self, *_args) -> None:
+        self._finish()
+
+    def _finish(self) -> None:
+        self.backdrop.running = False
+        self.visible = False
+        keys = self._mark_keys
+        self._mark_keys = []
+        for key in keys:
+            PROGRESS.mark_story_seen(key)
+        self.on_finish()
+
+    # Катсцена листается тапом по любому месту, а кнопки работают как обычно.
+    def on_touch_down(self, touch):
+        if not self.visible:
+            return False
+        if self.skip_button.collide_point(*touch.pos) or self.next_button.collide_point(
+            *touch.pos
+        ):
+            return super().on_touch_down(touch)
+        self.advance()
+        return True
+
+
 class GameScreen(Screen):
     def __init__(self, app_ref, screen_manager, **kwargs):
         super().__init__(**kwargs)
@@ -2676,6 +2947,11 @@ class GameScreen(Screen):
         self.add_widget(self.building_panel)
         self.end = EndOverlay()
         self.add_widget(self.end)
+
+        # Сюжетная катсцена поверх всего: показывается перед боем и после победы.
+        self.story = CutsceneOverlay(on_finish=self._on_story_done)
+        self.add_widget(self.story)
+        self._story_pending = None
 
         self.pause.continue_button.bind(on_release=self._close_pause)
         self.pause.restart_button.bind(on_release=self._restart)
@@ -2754,7 +3030,21 @@ class GameScreen(Screen):
         seed = self._daily_seed if self.mode == "daily" else None
         self.arena.load_level(level, index, mode=self.mode, seed=seed)
         self.arena.start_new()
-        self.arena.resume()
+        # Перед сюжетной картой показываем катсцену, а бой держим на паузе.
+        story_lines = []
+        if self.mode == "campaign" and not self._selected_tutorial and story_enabled():
+            first = not PROGRESS.story_seen("intro")
+            story_lines = campaigns_for(level.id, first, PROGRESS.story_seen)
+        if story_lines:
+            self.arena.pause()
+            self._start_story(
+                story_lines,
+                chapter=t(level.name),
+                mark_keys=self._story_brief_keys(level.id),
+                on_done=self._resume_after_story,
+            )
+        else:
+            self.arena.resume()
         music.apply_settings(PROGRESS.music)
         music.play(THEME_BY_LEVEL.get(level.id, MENU_THEME))
         sfx.apply_settings(PROGRESS.sfx)
@@ -2803,6 +3093,48 @@ class GameScreen(Screen):
         for event in self._hint_events:
             event.cancel()
         self._hint_events = []
+
+    # ------------------------------------------------------------------
+    # Сюжет кампании
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _story_brief_keys(level_id: str) -> list[str]:
+        keys = []
+        if not PROGRESS.story_seen("intro"):
+            keys.append("intro")
+        if not PROGRESS.story_seen(f"brief:{level_id}"):
+            keys.append(f"brief:{level_id}")
+        return keys
+
+    @staticmethod
+    def _story_epilogue_keys(level_id: str) -> list[str]:
+        keys = []
+        if not PROGRESS.story_seen(f"epi:{level_id}"):
+            keys.append(f"epi:{level_id}")
+        if level_id == CITADEL_ID and not PROGRESS.story_seen("finale"):
+            keys.append("finale")
+        return keys
+
+    def _start_story(self, lines, chapter="", mark_keys=None,
+                     final_label="", on_done=None) -> None:
+        self._story_pending = on_done
+        self.story.play(
+            lines,
+            chapter=chapter,
+            final_label=final_label,
+            mark_keys=mark_keys,
+        )
+
+    def _on_story_done(self) -> None:
+        pending = self._story_pending
+        self._story_pending = None
+        if pending is not None:
+            pending()
+        self._sync_hud()
+
+    def _resume_after_story(self) -> None:
+        if not self.arena.ended:
+            self.arena.resume()
 
     # ------------------------------------------------------------------
     def _on_toast(self, text: str, kind: str = "info") -> None:
@@ -2894,6 +3226,16 @@ class GameScreen(Screen):
         self.end.open(
             win, stats, stars, unlock_name, t(level.name), new_achievements
         )
+        # После победы показываем эпилог карты (и развязку после цитадели).
+        if win and self.mode == "campaign" and story_enabled():
+            epilogue = epilogue_for(level.id, PROGRESS.story_seen)
+            if epilogue:
+                self.story.play(
+                    epilogue,
+                    chapter=t(level.name),
+                    final_label=t("К ВЫБОРУ КАРТЫ"),
+                    mark_keys=self._story_epilogue_keys(level.id),
+                )
 
     def _on_building(self, building, info: dict) -> None:
         if self.arena.ended:
@@ -2917,6 +3259,7 @@ class GameScreen(Screen):
             or self.shop.visible
             or self.building_panel.visible
             or self.end.visible
+            or self.story.visible
         )
         can_call = stats.get("wave_state") == "prep" and not overlays
         self.wave_prompt.visible = can_call and not self.arena.ended
@@ -2935,6 +3278,12 @@ class GameScreen(Screen):
     def _on_key_down(self, _window, key, *_args):
         if self.manager is None or self.manager.current != "game":
             return False
+        if self.story.visible:
+            if key == 27:
+                self.story._skip()
+            else:
+                self.story.advance()
+            return True
         if key == 27:
             if self.end.visible:
                 return True
@@ -3084,6 +3433,7 @@ class GameScreen(Screen):
         self.shop.visible = False
         self.building_panel.visible = False
         self.end.visible = False
+        self.story.visible = False
         self.wave_prompt.visible = False
 
     def _restart(self, *_args) -> None:

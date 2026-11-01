@@ -8,7 +8,7 @@ package.name = goldraid
 package.domain = org.goldraid
 
 # Версия видна в настройках Android.
-version = 1.5.0
+version = 1.7.0
 
 # Что попадает в APK.
 source.dir = .

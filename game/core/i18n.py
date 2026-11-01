@@ -530,6 +530,171 @@ EN: dict[str, str] = {
     "• Три новых достижения и значок «новое» в меню": (
         "• Three new achievements and a New badge in the menu"
     ),
+    # --- сюжет кампании 1.7.0 --------------------------------------------
+    "ПРОПУСТИТЬ": "SKIP",
+    "ДАЛЕЕ": "NEXT",
+    "ПОНЯТНО": "GOT IT",
+    "Рассказчик": "Narrator",
+    "ВСТУПЛЕНИЕ": "PROLOGUE",
+    "СЮЖЕТ · вступление и путь героя": "STORY · prologue and the hero's path",
+    "Рейн": "Rayn",
+    "Старейшина": "Elder",
+    "Мира": "Mira",
+    "Гракх": "Grаkh",
+    "Владыка Мор": "Warlord Mor",
+    # --- вступление ------------------------------------------------------
+    "Векá золото лежало под зелёными холмами, и векá никто не тревожил эти земли.": (
+        "For ages gold lay beneath the green hills, and for ages no one troubled these lands."
+    ),
+    "Рейн, беда. Гоблины сбиваются в орды у самых границ. Они идут за нашим золотом.": (
+        "Rayn, trouble. Goblins are gathering into hordes at our very borders. They come for our gold."
+    ),
+    "Значит, будем держать ворота. Я не отдам им ни одной монеты.": (
+        "Then we'll hold the gates. I won't give them a single coin."
+    ),
+    "И это ещё не всё. Я видела знамёна Тёмного владыки. Он пробуждается на востоке.": (
+        "And that's not all. I've seen the Dark Warlord's banners. He is awakening in the east."
+    ),
+    "Тогда слушай. Восемь рубежей отделяют нас от его цитадели. Пройди их все.": (
+        "Then listen. Eight frontiers stand between us and his citadel. Cross them all."
+    ),
+    "Начнём с долины. Строй башни, собирай золото — и не пускай врагов к воротам.": (
+        "We start with the valley. Build towers, gather gold — and keep the enemies from the gates."
+    ),
+    # --- брифинги карт ---------------------------------------------------
+    "Зелёная долина — спокойные подступы. Три дороги ведут к воротам.": (
+        "Green Valley — calm approaches. Three roads lead to the gates."
+    ),
+    "Первые отряды гоблинов уже близко. Учись ставить башни вдоль дорог.": (
+        "The first goblin squads are near. Learn to place towers along the roads."
+    ),
+    "Понял. Здесь я и построю первую линию обороны.": (
+        "Understood. This is where I'll build the first line of defense."
+    ),
+    "Каменный перевал. Узкие проходы меж скал — врагам негде развернуться.": (
+        "Stone Pass. Narrow gaps between the cliffs — no room for the enemy to spread out."
+    ),
+    "Держи башни на самих дорогах: в теснине каждый выстрел бьёт в цель.": (
+        "Keep towers right on the roads: in the gorge every shot hits home."
+    ),
+    "Теснина станет им могилой.": "The gorge will be their grave.",
+    "Выжженная пустошь дышит жаром. Четыре дороги — и по каждой идёт орда.": (
+        "The scorched waste breathes heat. Four roads — and a horde on each."
+    ),
+    "Здесь много вожаков. Гоблины идут злыми и упорными.": (
+        "There are many chiefs here. The goblins come vicious and stubborn."
+    ),
+    "Пусть идут. Чем больше врагов — тем больше золота.": (
+        "Let them come. The more enemies — the more gold."
+    ),
+    "Дремучий лес. Чаща скрывает подходы — врагов увидишь поздно.": (
+        "Deep Forest. The thicket hides the approaches — you'll see enemies late."
+    ),
+    "Зато деревья теснят их строй. Ставь башни на тропах и держи бойцов наготове.": (
+        "But the trees cramp their ranks. Place towers on the trails and keep fighters ready."
+    ),
+    "Проберёмся сквозь чащу.": "We'll make it through the thicket.",
+    "Студёная теснина. Камни покрыты льдом, дорога узкая, а враги не дают передышки.": (
+        "Frozen Gorge. Stones are ice-coated, the road is narrow, and enemies give no respite."
+    ),
+    "Волна за волной, без остановки. Не успеешь собрать золото — останешься без обороны.": (
+        "Wave after wave, without pause. Fail to gather gold — and you're left without defenses."
+    ),
+    "Холод им не помеха, но крепкие стены — помеха.": (
+        "Cold doesn't stop them, but solid walls do."
+    ),
+    "Пылающий кратер. Пять дорог, раскалённая земля и бесконечные орды.": (
+        "Burning Crater. Five roads, scorched land and endless hordes."
+    ),
+    "Здесь погибла не одна оборона. Держись: конец пути уже близок.": (
+        "More than one defense has fallen here. Hold on: the end of the road is near."
+    ),
+    "Я выстою. Ради каждого, кто остался дома.": (
+        "I will hold. For everyone who stayed home."
+    ),
+    "Забытые руины. Древние стены рассыпались, но дороги и золото остались.": (
+        "Forgotten Ruins. The ancient walls have crumbled, but roads and gold remain."
+    ),
+    "Здесь золота больше, чем где-либо. И врагов — тоже.": (
+        "There's more gold here than anywhere. And more enemies, too."
+    ),
+    "Соберу всё до последней монеты.": "I'll gather every last coin.",
+    "Тёмная цитадель. Небо затянуто гарью, и сам владыка ждёт у ворот.": (
+        "Dark Citadel. The sky is choked with soot, and the Warlord himself waits at the gates."
+    ),
+    "Смертный, ты зашёл слишком далеко. Здесь твоя оборона и закончится.": (
+        "Mortal, you have come too far. This is where your defense ends."
+    ),
+    "Нет. Здесь закончится твоё владычество.": (
+        "No. This is where your reign ends."
+    ),
+    "Рейн, на последней волне придёт он сам. Не дрогни.": (
+        "Rayn, he will come himself on the final wave. Do not waver."
+    ),
+    # --- эпилоги ---------------------------------------------------------
+    "Долина свободна. Гоблины отступили к перевалу.": (
+        "The valley is free. The goblins have fallen back to the pass."
+    ),
+    "Идём дальше. Каждая монета — ещё один камень в нашей стене.": (
+        "Onward. Every coin is another stone in our wall."
+    ),
+    "Перевал наш. Теснина приняла врагов, но не пропустила.": (
+        "The pass is ours. The gorge took the enemies but let none through."
+    ),
+    "Пустошь очищена. Пепел врагов развеял ветер.": (
+        "The waste is cleared. The wind scattered the enemies' ashes."
+    ),
+    "Лес снова молчит. Чаща нам помогла.": (
+        "The forest is silent again. The thicket helped us."
+    ),
+    "Студёная теснина выстояла. Даже холод не остановил тебя.": (
+        "The Frozen Gorge held. Even the cold didn't stop you."
+    ),
+    "Кратер затих. Раскалённая земля впервые остывает.": (
+        "The crater has gone quiet. The scorched land cools for the first time."
+    ),
+    "Слишком близко к цитадели. Дальше будет тяжелее.": (
+        "Too close to the citadel. It only gets harder from here."
+    ),
+    "Руины снова молчат. Дороги наши, и золото — тоже.": (
+        "The ruins are silent again. The roads are ours, and the gold too."
+    ),
+    "Тёмный владыка пал. Небо над цитаделью впервые за годы очистилось.": (
+        "The Dark Warlord has fallen. The sky above the citadel clears for the first time in years."
+    ),
+    "Мы выстояли.": "We held.",
+    # --- развязка --------------------------------------------------------
+    "Рейн, вся земля говорит о тебе. Восемь рубежей — и ни одного промаха.": (
+        "Rayn, the whole land speaks of you. Eight frontiers — and not a single miss."
+    ),
+    "Золотые жилы снова наши. Люди возвращаются в родные дома.": (
+        "The gold veins are ours again. People are returning to their homes."
+    ),
+    "Это не конец. Пусть только попробуют прийти снова — ворота выстоят.": (
+        "This isn't the end. Let them try to come again — the gates will hold."
+    ),
+    "Кампания пройдена. Теперь ты — легенда Золотого рейда.": (
+        "Campaign complete. Now you are a legend of the Golden Raid."
+    ),
+    # --- что нового 1.7.0 ------------------------------------------------
+    "• Сюжет в кампании: вступление, брифинги и финалы карт": (
+        "• A campaign story: prologue, briefings and map finales"
+    ),
+    "• Атмосферные катсцены с портретами героев и врагов": (
+        "• Atmospheric cutscenes with hero and enemy portraits"
+    ),
+    "• Аккуратная граница карты — декор больше не выходит за край": (
+        "• A neat map border — decor no longer spills over the edge"
+    ),
+    "• Интерфейс не растягивается на широком экране ПК": (
+        "• The interface no longer stretches on a wide PC screen"
+    ),
+    "• С экрана «КАМПАНИЯ» убраны дублирующие режимы": (
+        "• Duplicate modes removed from the Campaign screen"
+    ),
+    "• Исправлен номер карты в медальоне": (
+        "• Fixed the map number inside the medallion"
+    ),
 }
 
 

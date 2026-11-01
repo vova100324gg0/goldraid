@@ -24,6 +24,17 @@ from ..render.icons import draw_icon
 from .fonts import DISPLAY_FONT
 
 
+# Максимальная ширина интерфейса на широких экранах. На ПК в большом окне
+# кнопки не должны растягиваться на всю ширину — держим «телефонную» форму
+# и центрируем её.
+MAX_CONTENT_WIDTH = 470.0  # в dp
+
+
+def content_width(screen_w: float) -> float:
+    """Ширина рабочей колонки: не шире телефона, но не больше экрана."""
+    return min(screen_w, dp(MAX_CONTENT_WIDTH))
+
+
 def _set_text(label: Label, text: str) -> None:
     """Меняет текст только если он реально другой.
 
@@ -1154,7 +1165,22 @@ class Overlay(FloatLayout):
 
     def add_panel(self, panel) -> None:
         self.panel = panel
+        # Панель не должна растягиваться на всю ширину большого окна:
+        # запоминаем исходную долю и ограничиваем реальную ширину.
+        try:
+            self._panel_ratio = float(panel.size_hint_x or 1.0)
+        except (TypeError, ValueError):
+            self._panel_ratio = 0.9
+        panel.size_hint_x = None
         self.add_widget(panel)
+        self.bind(size=self._fit_panel, pos=self._fit_panel)
+        self._fit_panel()
+
+    def _fit_panel(self, *_args) -> None:
+        if self.panel is None:
+            return
+        width = min(self.width * self._panel_ratio, dp(MAX_CONTENT_WIDTH))
+        self.panel.width = max(dp(220), width)
 
     def on_visible(self, _instance, value: bool) -> None:
         self.opacity = 1.0 if value else 0.0

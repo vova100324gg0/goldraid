@@ -395,10 +395,14 @@ def build_background(group, level, detail: bool = True) -> None:
 
     # --- Рельеф: мягкие всхолмления с направленной тенью -----------------
     for _ in range(150 if detail else 70):
-        x = rnd.uniform(-40, w + 40)
-        y = rnd.uniform(-40, h + 40)
         cw = rnd.uniform(180, 460)
         ch = rnd.uniform(90, 210)
+        # Центр держим так, чтобы холм не вылезал за границу карты
+        # (раньше пятна декора уходили в «пустоту» за краем).
+        half_w = cw * 0.52
+        half_h = ch * 0.52
+        x = rnd.uniform(min(half_w, w * 0.5), max(w * 0.5, w - half_w))
+        y = rnd.uniform(min(half_h, h * 0.5), max(h * 0.5, h - half_h))
         roll = rnd.random()
         if roll < 0.5:
             _hill(group, x, y, cw, ch, level.ground_light, level.ground_dark)
@@ -604,17 +608,31 @@ def build_background(group, level, detail: bool = True) -> None:
             _flower(group, x + rnd.uniform(-8, 8), y + rnd.uniform(-7, 7),
                     (0.98, 0.94, 0.58, 1) if rnd.random() < 0.5 else (0.95, 0.58, 0.51, 1))
 
-    # --- Мягкая кромка мира вместо резкой «стены» ------------------------
-    for i, alpha in enumerate((0.16, 0.26, 0.40)):
-        thick = 26 + i * 22
-        rect(group, -thick, -thick, w + thick * 2, thick, (0.05, 0.08, 0.06, alpha))
-        rect(group, -thick, h, w + thick * 2, thick, (0.05, 0.08, 0.06, alpha))
-        rect(group, -thick, 0, thick, h, (0.05, 0.08, 0.06, alpha))
-        rect(group, w, 0, thick, h, (0.05, 0.08, 0.06, alpha))
-    for x0, y0, ww, hh in (
-        (0, 0, w, 6), (0, h - 6, w, 6), (0, 0, 6, h), (w - 6, 0, 6, h),
-    ):
-        rect(group, x0, y0, ww, hh, (0.20, 0.33, 0.22, 0.55))
+    # --- Рамка карты: непрозрачный борт вместо «вылезшего» декора --------
+    # За границей мира декор больше не просвечивает: любые пятна, задевшие
+    # кромку, аккуратно срезаются тёмным бортом. Внутри — мягкая тень,
+    # чтобы край читался как настоящая граница, а не обрубленный обрыв.
+    far = 1600.0
+    frame = (0.075, 0.105, 0.086, 1.0)
+    rect(group, -far, -far, w + far * 2, far, frame)          # снизу
+    rect(group, -far, h, w + far * 2, far, frame)             # сверху
+    rect(group, -far, 0, far, h, frame)                       # слева
+    rect(group, w, 0, far, h, frame)                          # справа
+
+    for i, alpha in enumerate((0.34, 0.22, 0.13)):
+        thick = 9.0 + i * 13.0
+        rect(group, 0, 0, w, thick, (0.03, 0.06, 0.04, alpha))
+        rect(group, 0, h - thick, w, thick, (0.03, 0.06, 0.04, alpha))
+        rect(group, 0, 0, thick, h, (0.03, 0.06, 0.04, alpha))
+        rect(group, w - thick, 0, thick, h, (0.03, 0.06, 0.04, alpha))
+
+    # Светлая окантовка ровно по границе мира.
+    edge = 4.0
+    line_color = (0.34, 0.48, 0.31, 0.9)
+    rect(group, -edge, -edge, w + edge * 2, edge, line_color)
+    rect(group, -edge, h, w + edge * 2, edge, line_color)
+    rect(group, -edge, 0, edge, h, line_color)
+    rect(group, w, 0, edge, h, line_color)
 
 
 # Совместимость со старым кодом: путь точки до отрезка нужен рендеру.

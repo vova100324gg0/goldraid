@@ -11,7 +11,7 @@ from ..world.levels import LEVELS
 
 # Версия формата сохранения. При изменении структуры старые файлы
 # дочитываются значениями по умолчанию, а не теряются.
-SAVE_VERSION = 5
+SAVE_VERSION = 6
 
 DEFAULT_COUNTERS = {
     "runs": 0,
@@ -65,6 +65,8 @@ class Progress:
         }
         # Сколько достижений игрок уже видел — для значка «новое» в меню.
         self.achievements_seen = 0
+        # Какие сюжетные сцены игрок уже видел: вступление, брифинги и финалы.
+        self.story: dict[str, bool] = {}
         self.daily: dict = {
             "date": "",
             "best": 0,
@@ -144,6 +146,11 @@ class Progress:
             )
         except (TypeError, ValueError):
             self.achievements_seen = 0
+        story = raw.get("story")
+        if isinstance(story, dict):
+            self.story = {
+                str(key): bool(value) for key, value in story.items()
+            }
         daily = raw.get("daily")
         if isinstance(daily, dict):
             try:
@@ -193,6 +200,7 @@ class Progress:
                 "endless_best": self.endless_best,
                 "records": dict(self.records),
                 "achievements_seen": self.achievements_seen,
+                "story": dict(self.story),
                 "daily": dict(self.daily),
             }
             self.path.write_text(
@@ -294,6 +302,17 @@ class Progress:
     def mark_seen(self, version: str) -> None:
         if version and self.seen_version != version:
             self.seen_version = version
+            self.save()
+
+    # ------------------------------------------------------------------
+    # Сюжет кампании: какие сцены уже показаны
+    # ------------------------------------------------------------------
+    def story_seen(self, key: str) -> bool:
+        return bool(self.story.get(key, False))
+
+    def mark_story_seen(self, key: str) -> None:
+        if key and not self.story.get(key):
+            self.story[key] = True
             self.save()
 
     # ------------------------------------------------------------------
@@ -413,6 +432,7 @@ class Progress:
         self.endless_best = 0
         self.records = {"run_gold": 0, "run_kills": 0, "fastest_win": 0.0}
         self.achievements_seen = 0
+        self.story = {}
         self.daily = {"date": "", "best": 0, "done": False, "win": False, "streak": 0}
         self.version = SAVE_VERSION
         self.save()
