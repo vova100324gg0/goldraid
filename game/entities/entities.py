@@ -30,6 +30,7 @@ class Coin:
     x: float
     y: float
     value: int
+    rich: bool = False
     phase: float = field(default_factory=lambda: random.random() * 6.28)
 
 

@@ -225,7 +225,7 @@ class Arena(Widget):
             self._spawn_pickup()
         # Крупные жилы лежат на карте с самого начала и не исчезают.
         for spot in level.rich_spots:
-            self.pickups.append(Coin(spot[0], spot[1], RICH_GOLD_VALUE))
+            self.pickups.append(Coin(spot[0], spot[1], RICH_GOLD_VALUE, rich=True))
         self.respawn_timer = 0.0
         self._shake = 0.0
         self.shake_x = 0.0
@@ -1193,7 +1193,11 @@ class Arena(Widget):
                     t("+{amount} золота").format(amount=coin.value), "gold"
                 )
         self.pickup_timer -= dt
-        if self.pickup_timer > 0 or len(self.pickups) >= GOLD_PILE_COUNT:
+        # Богатые жилы лежат на карте постоянно и не считаются обычными
+        # кучками: раньше их монеты «занимали» лимит GOLD_PILE_COUNT, и
+        # обычные кучки почти не появлялись, пока жилы не соберут.
+        piles = sum(1 for coin in self.pickups if not coin.rich)
+        if self.pickup_timer > 0 or piles >= GOLD_PILE_COUNT:
             return
         self.pickup_timer = GOLD_PILE_RESPAWN
         self._spawn_pickup()
@@ -1763,7 +1767,10 @@ class Arena(Widget):
         if self._enemy_list_ref is self.enemies:
             self._enemy_list_len = len(self.enemies)
         self.kills += 1
-        reward = int(enemy.gold * (1 + 0.06 * (self.wave - 1)))
+        # Золото уже отмасштабировано по волне при спавне врага; здесь
+        # только начисляем его. Раньше множитель применялся и тут, и доход
+        # рос квадратично — к 9-й волне примерно вдвое больше задуманного.
+        reward = max(0, int(enemy.gold))
         self.gold += reward
         self.gold_earned += reward
         self._add_puff(enemy.x, enemy.y + 15, (0.85, 0.18, 0.15, 1))
