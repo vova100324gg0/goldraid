@@ -75,6 +75,11 @@ _KEYMAP = {
 # так что промах на пол-пальца всё равно попадает куда надо.
 BUILD_TAP_RADIUS = 110.0
 
+# Сетка для поиска целей. Враги раскладываются по клеткам раз в кадр, и
+# башни, бойцы и герой смотрят только клетки, пересекающие радиус поиска,
+# вместо перебора всей орды.
+TARGET_CELL = 128.0
+
 # --- Баланс поздних волн (1.8.0) -------------------------------------------
 # Защита игрока упирается в потолок: постройки максимум 5 уровня, общие
 # улучшения — 8. Если враги растут без предела, длинные карты (Кратер,
@@ -188,6 +193,15 @@ class Arena(Widget):
         self.effects: list[Effect] = []
         self.particles: list[Particle] = []
         self.pickups: list[Coin] = []
+        # Пространственный индекс врагов: строится раз в кадр и
+        # переиспользуется героем, бойцами и башнями. None — нужно собрать.
+        self._enemy_grid: dict[tuple[int, int], list[Enemy]] | None = None
+        # Следим, не подменили ли список врагов извне (тесты, отладка):
+        # если список другой или изменился, индекс пересобирается.
+        self._enemy_list_ref: list[Enemy] | None = None
+        self._enemy_list_len = 0
+        # Кэш аур тотемов: пересобирается только при изменении построек.
+        self._totem_auras: list[tuple[float, float, float, float]] | None = None
         self.pickup_timer = GOLD_PILE_RESPAWN
         self.rage_timer = 0.0
         self.hired = 0
@@ -445,6 +459,7 @@ class Arena(Widget):
             timer=float(data["period"][0]) if kind == "mine" else 0.0,
         )
         self.buildings.append(building)
+        self._totem_auras = None
         self.buildings_built += 1
         self.build_mode = None
         self._build_focus = None
@@ -534,6 +549,7 @@ class Arena(Widget):
             return False, t("Не хватает золота")
         self.gold -= cost
         building.level += 1
+        self._totem_auras = None
         old_max = building.max_hp
         building.max_hp = float(data["hp"][building.level - 1])
         building.hp = min(building.max_hp, building.hp + (building.max_hp - old_max))
@@ -645,6 +661,7 @@ class Arena(Widget):
         data = BUILD_TYPES[building.kind]
         self.gold += refund
         self.buildings.remove(building)
+        self._totem_auras = None
         if building.kind == "barracks":
             self.defenders = [
                 defender
@@ -840,6 +857,10 @@ class Arena(Widget):
         self._base_notice_cd = max(0.0, self._base_notice_cd - dt)
         self.rage_timer = max(0.0, self.rage_timer - dt)
 
+        # Один пространственный индекс врагов на кадр: им пользуются герой,
+        # бойцы, башни и расталкивание толпы.
+        self._enemy_grid = self._build_enemy_grid()
+
         self._update_hero(dt)
         self._update_defenders(dt)
         self._update_towers(dt)
@@ -978,17 +999,62 @@ class Arena(Widget):
                 defender.y += dy / length * step
                 defender.facing = math.atan2(dy, dx)
 
-    def _defender_target(self, defender: Defender):
-        best = None
-        best_d = 250.0
-        bx, by = self.level.base_pos
+    def _build_enemy_grid(self) -> dict[tuple[int, int], list[Enemy]]:
+        """Раскладывает врагов по клеткам — O(n) за кадр."""
+        cell = TARGET_CELL
+        grid: dict[tuple[int, int], list[Enemy]] = {}
+        put = grid.setdefault
         for enemy in self.enemies:
-            if dist(enemy.x, enemy.y, bx, by) > 560:
-                continue
-            d = dist(enemy.x, enemy.y, defender.x, defender.y)
-            if d < best_d:
-                best_d = d
-                best = enemy
+            put((int(enemy.x // cell), int(enemy.y // cell)), []).append(enemy)
+        self._enemy_list_ref = self.enemies
+        self._enemy_list_len = len(self.enemies)
+        return grid
+
+    def _enemy_grid_valid(self) -> bool:
+        """Индекс актуален, если список врагов тот же и не менялся извне."""
+        return (
+            self._enemy_grid is not None
+            and self._enemy_list_ref is self.enemies
+            and self._enemy_list_len == len(self.enemies)
+        )
+
+    def _enemy_grid_fresh(self) -> dict[tuple[int, int], list[Enemy]]:
+        """Возвращает актуальный индекс, пересобирая его при необходимости."""
+        if not self._enemy_grid_valid():
+            self._enemy_grid = self._build_enemy_grid()
+        return self._enemy_grid  # type: ignore[return-value]
+
+    def _defender_target(self, defender: Defender):
+        grid = self._enemy_grid_fresh()
+        cell = TARGET_CELL
+        bx, by = self.level.base_pos
+        base_limit2 = 560.0 * 560.0
+        dx0, dy0 = defender.x, defender.y
+        best = None
+        best_d2 = 250.0 * 250.0
+        # Смотрим только клетки, пересекающие квадрат радиуса 250.
+        gx0 = int((dx0 - 250.0) // cell)
+        gx1 = int((dx0 + 250.0) // cell)
+        gy0 = int((dy0 - 250.0) // cell)
+        gy1 = int((dy0 + 250.0) // cell)
+        for gx in range(gx0, gx1 + 1):
+            for gy in range(gy0, gy1 + 1):
+                bucket = grid.get((gx, gy))
+                if not bucket:
+                    continue
+                for enemy in bucket:
+                    if enemy.hp <= 0:
+                        continue
+                    bdx = enemy.x - bx
+                    bdy = enemy.y - by
+                    if bdx * bdx + bdy * bdy > base_limit2:
+                        continue
+                    ddx = enemy.x - dx0
+                    ddy = enemy.y - dy0
+                    d2 = ddx * ddx + ddy * ddy
+                    if d2 < best_d2:
+                        best_d2 = d2
+                        best = enemy
         return best
 
     def _update_towers(self, dt: float) -> None:
@@ -1024,16 +1090,36 @@ class Arena(Widget):
                 )
             )
 
-    def _totem_boost(self, x: float, y: float) -> float:
-        """Максимальный бонус урона от тотемов рядом с точкой."""
-        boost = 0.0
+    def _refresh_totem_auras(self) -> None:
+        """Собирает ауры тотемов один раз — постройки почти не меняются."""
+        data = BUILD_TYPES["totem"]
+        auras: list[tuple[float, float, float, float]] = []
         for building in self.buildings:
             if building.kind != "totem":
                 continue
-            data = BUILD_TYPES["totem"]
             level = building.level - 1
-            if dist(x, y, building.x, building.y) <= data["aura"][level]:
-                boost = max(boost, data["boost"][level])
+            auras.append(
+                (
+                    building.x,
+                    building.y,
+                    data["aura"][level],
+                    data["boost"][level],
+                )
+            )
+        self._totem_auras = auras
+
+    def _totem_boost(self, x: float, y: float) -> float:
+        """Максимальный бонус урона от тотемов рядом с точкой."""
+        auras = self._totem_auras
+        if auras is None:
+            self._refresh_totem_auras()
+            auras = self._totem_auras or []
+        boost = 0.0
+        for tx, ty, aura, value in auras:
+            dx = x - tx
+            dy = y - ty
+            if dx * dx + dy * dy <= aura * aura and value > boost:
+                boost = value
         return boost
 
     def _update_mines(self, dt: float) -> None:
@@ -1116,13 +1202,11 @@ class Arena(Widget):
         # Расталкивание толпы раньше было O(n²) и просаживало кадр на
         # больших ордах. Раскладываем врагов по сетке и смотрим только
         # соседние ячейки — это O(n).
-        cell = 100.0
-        grid: dict[tuple[int, int], list[Enemy]] = {}
-        for enemy in self.enemies:
-            key = (int(enemy.x // cell), int(enemy.y // cell))
-            grid.setdefault(key, []).append(enemy)
+        cell = TARGET_CELL
+        grid = self._enemy_grid_fresh()
         for enemy in list(self.enemies):
-            if enemy not in self.enemies:
+            # Враг мог погибнуть от героя/башни до начала этого прохода.
+            if enemy.hp <= 0:
                 continue
             enemy.phase += dt
             enemy.attack_cd -= dt
@@ -1179,25 +1263,33 @@ class Arena(Widget):
                 mx, my = dx / length, dy / length
 
             # Мягкое расталкивание толпы — только с соседями по сетке.
+            # Клетка 128 больше максимального зазора (радиусы + 2), поэтому
+            # соседей достаточно искать в 3×3 клетках.
             gx = int(enemy.x // cell)
             gy = int(enemy.y // cell)
-            neighbours: list[Enemy] = []
             for nx in (gx - 1, gx, gx + 1):
                 for ny in (gy - 1, gy, gy + 1):
-                    neighbours.extend(grid.get((nx, ny), ()))
-            for other in neighbours:
-                if other is enemy:
-                    continue
-                ox = enemy.x - other.x
-                oy = enemy.y - other.y
-                od = math.hypot(ox, oy)
-                minimum = enemy.radius + other.radius + 2
-                if 0 < od < minimum:
-                    push = (minimum - od) / minimum * 55 * dt
-                    mx += ox / od * push
-                    my += oy / od * push
+                    bucket = grid.get((nx, ny))
+                    if not bucket:
+                        continue
+                    for other in bucket:
+                        if other is enemy or other.hp <= 0:
+                            continue
+                        ox = enemy.x - other.x
+                        oy = enemy.y - other.y
+                        minimum = enemy.radius + other.radius + 2
+                        min2 = minimum * minimum
+                        od2 = ox * ox + oy * oy
+                        if 0 < od2 < min2:
+                            od = math.sqrt(od2)
+                            push = (minimum - od) / minimum * 55 * dt
+                            mx += ox / od * push
+                            my += oy / od * push
             enemy.x = clamp(enemy.x + mx * enemy.speed * dt, 20, self.world_w - 20)
             enemy.y = clamp(enemy.y + my * enemy.speed * dt, 20, self.world_h - 20)
+
+        # Враги сдвинулись — индекс устарел до следующего кадра.
+        self._enemy_grid = None
 
     def _route_point(self, enemy: Enemy) -> tuple[float, float]:
         """Точка на дороге, к которой идёт враг."""
@@ -1252,44 +1344,61 @@ class Arena(Widget):
         """Ближайшая цель рядом или None — тогда враг идёт по дороге."""
         bx, by = self.level.base_pos
         best = None
-        best_d = 1e9
-        base_reach = 128.0 + enemy.radius * 0.5
+        best_d2 = 1e30
+        radius = enemy.radius
+        ex, ey = enemy.x, enemy.y
+        base_reach = 128.0 + radius * 0.5
 
-        base_d = dist(enemy.x, enemy.y, bx, by)
-        if base_d <= base_reach:
+        bdx = ex - bx
+        bdy = ey - by
+        base_d2 = bdx * bdx + bdy * bdy
+        if base_d2 <= base_reach * base_reach:
             best = (bx, by, base_reach, "base", None)
-            best_d = base_d
+            best_d2 = base_d2
 
-        if self.hero.hp > 0:
-            hero_d = dist(enemy.x, enemy.y, self.hero.x, self.hero.y)
-            hero_reach = 34.0 + enemy.radius * 0.3
+        hero = self.hero
+        if hero.hp > 0:
+            hdx = ex - hero.x
+            hdy = ey - hero.y
+            hero_d2 = hdx * hdx + hdy * hdy
+            hero_reach = 34.0 + radius * 0.3
             if enemy.attack_range > 0:
                 hero_reach = enemy.attack_range * 0.8
             if enemy.aggro > 0:
-                if hero_d < 320 and hero_d < best_d:
-                    best = (self.hero.x, self.hero.y, hero_reach, "hero", self.hero)
-                    best_d = hero_d
-            elif hero_d < 70 + enemy.radius and hero_d < best_d:
-                best = (self.hero.x, self.hero.y, hero_reach, "hero", self.hero)
-                best_d = hero_d
+                if hero_d2 < 320.0 * 320.0 and hero_d2 < best_d2:
+                    best = (hero.x, hero.y, hero_reach, "hero", hero)
+                    best_d2 = hero_d2
+            else:
+                near = 70.0 + radius
+                if hero_d2 < near * near and hero_d2 < best_d2:
+                    best = (hero.x, hero.y, hero_reach, "hero", hero)
+                    best_d2 = hero_d2
 
+        def_reach = 34.0 + radius * 0.3
+        if enemy.attack_range > 0:
+            def_reach = max(def_reach, enemy.attack_range)
+        def_gate = 110.0 + radius
+        def_gate2 = def_gate * def_gate
         for defender in self.defenders:
-            d = dist(enemy.x, enemy.y, defender.x, defender.y)
-            reach = 34.0 + enemy.radius * 0.3
-            if enemy.attack_range > 0:
-                reach = max(reach, enemy.attack_range)
-            if d < 110 + enemy.radius and d < best_d:
-                best_d = d
-                best = (defender.x, defender.y, reach, "defender", defender)
+            dx = ex - defender.x
+            dy = ey - defender.y
+            d2 = dx * dx + dy * dy
+            if d2 < def_gate2 and d2 < best_d2:
+                best_d2 = d2
+                best = (defender.x, defender.y, def_reach, "defender", defender)
 
+        bld_reach = 48.0 + radius * 0.3
+        if enemy.attack_range > 0:
+            bld_reach = max(bld_reach, enemy.attack_range)
+        bld_gate = 90.0 + radius
+        bld_gate2 = bld_gate * bld_gate
         for building in self.buildings:
-            d = dist(enemy.x, enemy.y, building.x, building.y)
-            reach = 48.0 + enemy.radius * 0.3
-            if enemy.attack_range > 0:
-                reach = max(reach, enemy.attack_range)
-            if d < 90 + enemy.radius and d < best_d:
-                best_d = d
-                best = (building.x, building.y, reach, "building", building)
+            dx = ex - building.x
+            dy = ey - building.y
+            d2 = dx * dx + dy * dy
+            if d2 < bld_gate2 and d2 < best_d2:
+                best_d2 = d2
+                best = (building.x, building.y, bld_reach, "building", building)
 
         return best
 
@@ -1309,11 +1418,9 @@ class Arena(Widget):
         if kind == "base":
             self._damage_base(enemy.damage)
         elif kind == "building":
-            if obj in self.buildings:
-                self._damage_building(obj, enemy.damage)
+            self._damage_building(obj, enemy.damage)
         elif kind == "defender":
-            if obj in self.defenders:
-                self._damage_defender(obj, enemy.damage)
+            self._damage_defender(obj, enemy.damage)
         elif kind == "hero":
             self._damage_hero(enemy)
 
@@ -1509,14 +1616,16 @@ class Arena(Widget):
             self._end(False)
 
     def _damage_building(self, building: Building, amount: float) -> None:
-        if building not in self.buildings:
+        # Проданная постройка уже не в списке, хоть у неё ещё hp > 0.
+        if building.hp <= 0 or not any(b is building for b in self.buildings):
             return
         building.hp -= amount
         building.flash = 0.12
         self._add_particles(building.x, building.y + 30, 2, (0.95, 0.72, 0.34, 1), speed=45)
         if building.hp > 0:
             return
-        self.buildings.remove(building)
+        self._remove_identity(self.buildings, building)
+        self._totem_auras = None
         data = BUILD_TYPES[building.kind]
         self.on_toast(
             t("{name} разрушена!").format(name=t(data["name"])), "bad"
@@ -1525,13 +1634,13 @@ class Arena(Widget):
         self._shake = max(self._shake, 9.0)
 
     def _damage_defender(self, defender: Defender, amount: float) -> None:
-        if defender not in self.defenders:
+        if defender.hp <= 0:
             return
         defender.hp -= amount
         defender.hit_flash = 0.12
         if defender.hp > 0:
             return
-        self.defenders.remove(defender)
+        self._remove_identity(self.defenders, defender)
         self._add_puff(defender.x, defender.y + 16, (0.38, 0.62, 0.85, 1))
 
     def _damage_hero(self, enemy: Enemy) -> None:
@@ -1563,20 +1672,49 @@ class Arena(Widget):
     # ------------------------------------------------------------------
     # Поиск целей и награды
     # ------------------------------------------------------------------
+    @staticmethod
+    def _remove_identity(seq: list, item) -> bool:
+        """Удаляет объект по ссылке, а не по равенству полей.
+
+        ``list.remove`` сравнивает dataclass'ы по всем полям: на большой
+        орде это дорого и может задеть «похожего» соседа. Сравнение по
+        идентичности дешевле и точнее.
+        """
+        for index, other in enumerate(seq):
+            if other is item:
+                del seq[index]
+                return True
+        return False
+
     def _nearest_enemy(self, x: float, y: float, radius: float):
+        grid = self._enemy_grid_fresh()
+        cell = TARGET_CELL
         best = None
-        best_d = radius * radius
-        for enemy in self.enemies:
-            d2 = (enemy.x - x) ** 2 + (enemy.y - y) ** 2
-            if d2 <= best_d:
-                best_d = d2
-                best = enemy
+        best_d2 = radius * radius
+        gx0 = int((x - radius) // cell)
+        gx1 = int((x + radius) // cell)
+        gy0 = int((y - radius) // cell)
+        gy1 = int((y + radius) // cell)
+        for gx in range(gx0, gx1 + 1):
+            for gy in range(gy0, gy1 + 1):
+                bucket = grid.get((gx, gy))
+                if not bucket:
+                    continue
+                for enemy in bucket:
+                    if enemy.hp <= 0:
+                        continue
+                    d2 = (enemy.x - x) ** 2 + (enemy.y - y) ** 2
+                    if d2 <= best_d2:
+                        best_d2 = d2
+                        best = enemy
         return best
 
     def _damage_enemy(self, enemy: Enemy, amount: float, source_x: float = 0, source_y: float = 0,
                       aggro: bool = True, show_text: bool = False,
                       strong: bool = False) -> None:
-        if enemy not in self.enemies:
+        # Убитый враг сразу выпадает из списка, а его hp <= 0. Проверяем hp,
+        # а не membership по списку: это O(1) вместо O(n) на каждый удар.
+        if enemy.hp <= 0:
             return
         if enemy.armor > 0:
             amount = max(1.0, amount * (1.0 - enemy.armor))
@@ -1613,9 +1751,14 @@ class Arena(Widget):
         )
 
     def _kill_enemy(self, enemy: Enemy) -> None:
-        if enemy not in self.enemies:
+        if enemy.hp > 0:
             return
-        self.enemies.remove(enemy)
+        if not self._remove_identity(self.enemies, enemy):
+            return
+        # Список тот же, просто стал короче: индекс остаётся годным,
+        # погибшего врага отсекает проверка hp <= 0.
+        if self._enemy_list_ref is self.enemies:
+            self._enemy_list_len = len(self.enemies)
         self.kills += 1
         reward = int(enemy.gold * (1 + 0.06 * (self.wave - 1)))
         self.gold += reward
@@ -1778,18 +1921,24 @@ class Arena(Widget):
             )
 
     def _update_effects(self, dt: float) -> None:
-        for effect in list(self.effects):
+        # Пересобираем списки за один проход: list.remove по dataclass'ам
+        # сравнивает все поля и на плотном кадре стоит O(n²).
+        alive_effects: list[Effect] = []
+        for effect in self.effects:
             effect.t += dt
-            if effect.t >= effect.life:
-                self.effects.remove(effect)
-        for particle in list(self.particles):
+            if effect.t < effect.life:
+                alive_effects.append(effect)
+        self.effects = alive_effects
+        alive_particles: list[Particle] = []
+        for particle in self.particles:
             particle.t += dt
             particle.x += particle.vx * dt
             particle.y += particle.vy * dt
             particle.vx *= 0.94
             particle.vy *= 0.94
-            if particle.t >= particle.life:
-                self.particles.remove(particle)
+            if particle.t < particle.life:
+                alive_particles.append(particle)
+        self.particles = alive_particles
 
     def _update_shake(self, dt: float) -> None:
         self._shake = max(0.0, self._shake - dt * 30)

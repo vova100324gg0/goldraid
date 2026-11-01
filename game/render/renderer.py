@@ -34,6 +34,11 @@ from .sprites import (
 # Сколько пикселей мира за пределами экрана ещё считаем видимыми.
 CULL_MARGIN = 150.0
 
+# Сколько врагов в кадре терпим перед переходом на упрощённый силуэт.
+# Полный спрайт — около сорока инструкций Kivy; в большой орде именно их
+# создание, а не математика боя, съедает кадр на слабых телефонах.
+CROWD_THRESHOLD = 55
+
 
 def draw_arena(arena) -> None:
     shake_x = arena.shake_x
@@ -77,9 +82,16 @@ def draw_arena(arena) -> None:
         if visible(defender.x, defender.y):
             draw_defender(group, defender, arena.elapsed)
 
-    for enemy in arena.enemies:
-        if visible(enemy.x, enemy.y):
-            draw_enemy(group, enemy, arena.elapsed, detail=detail)
+    # Если в кадре одновременно много врагов, рисуем упрощённые силуэты:
+    # полный спрайт каждого перегружает слабые телефоны.
+    visible_enemies = [
+        enemy for enemy in arena.enemies if visible(enemy.x, enemy.y)
+    ]
+    crowd = len(visible_enemies) > CROWD_THRESHOLD
+    for enemy in visible_enemies:
+        draw_enemy(
+            group, enemy, arena.elapsed, detail=detail, crowd=crowd
+        )
 
     if arena.hero.hp > 0:
         draw_hero(group, arena.hero, arena.elapsed)

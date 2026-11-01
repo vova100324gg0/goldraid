@@ -182,7 +182,8 @@ def draw_hero(group, hero: Hero, t: float) -> None:
         ring(group, x, y + 24, 29, (1.0, 0.4, 0.3, 0.65), 1.5)
 
 
-def draw_enemy(group, enemy: Enemy, t: float, detail: bool = True) -> None:
+def draw_enemy(group, enemy: Enemy, t: float, detail: bool = True,
+               crowd: bool = False) -> None:
     x, y = enemy.x, enemy.y
     palettes = {
         "grunt": (RED_DARK, RED, (1, 0.86, 0.42, 1)),
@@ -222,6 +223,42 @@ def draw_enemy(group, enemy: Enemy, t: float, detail: bool = True) -> None:
         scale *= 1.08
     bob = math.sin(t * 9 + enemy.phase) * 1.5
     radius = enemy.radius
+
+    if crowd:
+        # Режим толпы: на экране десятки врагов, и полный спрайт каждого
+        # стоит слишком дорого. Оставляем узнаваемый силуэт — тело, голову
+        # и полоску здоровья. Цвета вида сохраняют читаемость.
+        if enemy.elite:
+            ring(group, x, y + 2, radius * 1.9, (1.0, 0.76, 0.24, 0.55), 2)
+        rounds(
+            group,
+            x - radius * 0.75,
+            y + 8 * scale + bob,
+            radius * 1.5,
+            radius * 1.55,
+            5 * scale,
+            body_color,
+        )
+        circle(group, x, y + 30 * scale + bob, 7.5 * scale, robe_color)
+        if enemy.hp < enemy.max_hp or enemy.boss or enemy.elite:
+            width = 48 if enemy.boss else (34 if enemy.kind == "brute" else 26)
+            if enemy.kind == "warlord":
+                bar_color = (0.95, 0.36, 0.52, 1)
+            elif enemy.boss:
+                bar_color = RED_LIGHT
+            elif enemy.elite:
+                bar_color = (1.0, 0.78, 0.26, 1)
+            else:
+                bar_color = (0.95, 0.34, 0.25, 1)
+            health_bar(
+                group,
+                x,
+                y + 48 * scale,
+                width,
+                enemy.hp / max(1.0, enemy.max_hp),
+                bar_color,
+            )
+        return
 
     if enemy.elite:
         ring(group, x, y + 2, radius * 1.9, (1.0, 0.76, 0.24, 0.55), 2)
