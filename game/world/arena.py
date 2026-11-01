@@ -34,6 +34,8 @@ from ..core.config import (
     HERO_REGEN,
     HERO_RESPAWN,
     HERO_SPEED,
+    HIRE_LIMIT,
+    MAX_DEFENDERS,
     RICH_GOLD_VALUE,
     SELL_REFUND,
     SHOP_ITEMS,
@@ -72,6 +74,14 @@ _KEYMAP = {
 # Соседние площадки стоят не ближе ~136 друг к другу, а строим в ближайшую,
 # так что промах на пол-пальца всё равно попадает куда надо.
 BUILD_TAP_RADIUS = 110.0
+
+# --- Баланс поздних волн (1.8.0) -------------------------------------------
+# Защита игрока упирается в потолок: постройки максимум 5 уровня, общие
+# улучшения — 8. Если враги растут без предела, длинные карты (Кратер,
+# Руины, Цитадель) превращаются в непроходимую стену уже к финальным волнам.
+# Поэтому потолок роста врагов срезан, а урон после 15-й волны растёт положе.
+LATE_HP_CAP = 14.0
+LATE_DAMAGE_CAP = 3.4
 
 
 class Arena(Widget):
@@ -180,6 +190,7 @@ class Arena(Widget):
         self.pickups: list[Coin] = []
         self.pickup_timer = GOLD_PILE_RESPAWN
         self.rage_timer = 0.0
+        self.hired = 0
         self.build_mode = None
         self._build_focus = None
         self._build_focus_index = None
@@ -668,6 +679,10 @@ class Arena(Widget):
         elif key == "guard":
             if not any(b.kind == "barracks" for b in self.buildings):
                 return False, t("Сначала построй казармы")
+            if self.hired >= HIRE_LIMIT:
+                return False, t("Лимит найма исчерпан")
+            if len(self.defenders) >= MAX_DEFENDERS:
+                return False, t("Отряд уже полон")
         return True, ""
 
     def buy_item(self, key: str) -> tuple[bool, str]:
@@ -693,7 +708,8 @@ class Arena(Widget):
         elif key == "guard":
             for building in self.buildings:
                 if building.kind == "barracks":
-                    self._spawn_defender(building)
+                    if self._spawn_defender(building):
+                        self.hired += 1
                     break
         self._draw()
         return True, t("Куплено: {name}").format(name=t(data["name"]))
@@ -905,9 +921,12 @@ class Arena(Widget):
         постройками, а плавно скользит вдоль них.
         """
         radius = HERO_RADIUS
+        # Препятствия не меняются внутри кадра: собираем список один раз,
+        # а не на каждом из двух проходов расталкивания.
+        solid = self._solid_circles()
         for _ in range(2):
             pushed = False
-            for cx, cy, cr in self._solid_circles():
+            for cx, cy, cr in solid:
                 dx = hero.x - cx
                 dy = hero.y - cy
                 distance = math.hypot(dx, dy)
@@ -1094,6 +1113,14 @@ class Arena(Widget):
         self._spawn_pickup()
 
     def _update_enemies(self, dt: float) -> None:
+        # Расталкивание толпы раньше было O(n²) и просаживало кадр на
+        # больших ордах. Раскладываем врагов по сетке и смотрим только
+        # соседние ячейки — это O(n).
+        cell = 100.0
+        grid: dict[tuple[int, int], list[Enemy]] = {}
+        for enemy in self.enemies:
+            key = (int(enemy.x // cell), int(enemy.y // cell))
+            grid.setdefault(key, []).append(enemy)
         for enemy in list(self.enemies):
             if enemy not in self.enemies:
                 continue
@@ -1151,8 +1178,14 @@ class Arena(Widget):
                 enemy.facing = math.atan2(dy, dx)
                 mx, my = dx / length, dy / length
 
-            # Мягкое расталкивание толпы.
-            for other in self.enemies:
+            # Мягкое расталкивание толпы — только с соседями по сетке.
+            gx = int(enemy.x // cell)
+            gy = int(enemy.y // cell)
+            neighbours: list[Enemy] = []
+            for nx in (gx - 1, gx, gx + 1):
+                for ny in (gy - 1, gy, gy + 1):
+                    neighbours.extend(grid.get((nx, ny), ()))
+            for other in neighbours:
                 if other is enemy:
                     continue
                 ox = enemy.x - other.x
@@ -1391,13 +1424,23 @@ class Arena(Widget):
         diff = self.level.difficulty
         # Кривая здоровья мягче прежней: квадратичный рост ограничен,
         # иначе бесконечный режим превращается в стену из губки.
+        # Потолок LATE_HP_CAP подобран так, чтобы включаться только на
+        # финальных волнах длинных карт, когда башни уже прокачаны.
         hp_scale = min(
-            20.0,
+            LATE_HP_CAP,
             diff * (1 + 0.14 * (wave - 1) + 0.010 * (wave - 1) ** 2),
         )
         enemy.hp *= hp_scale
         enemy.max_hp = enemy.hp
-        enemy.damage *= diff * (1 + 0.075 * (wave - 1))
+        # Урон растёт мягко: до 15-й волны — как раньше, дальше — положе.
+        # Иначе прокачанные до 5 уровня здания не успевают, а один прорыв
+        # сносит базу за пару секунд.
+        damage_scale = diff * (
+            1
+            + 0.075 * min(wave - 1, 14)
+            + 0.030 * max(0, wave - 15)
+        )
+        enemy.damage *= min(LATE_DAMAGE_CAP, damage_scale)
         enemy.speed *= min(1.35, 1 + 0.012 * (wave - 1))
         enemy.gold = int(enemy.gold * (1 + 0.06 * (wave - 1)))
 
@@ -1615,7 +1658,9 @@ class Arena(Widget):
         if dist(enemy.x, enemy.y, bx, by) <= radius + 40:
             self._damage_base(damage * 0.5)
 
-    def _spawn_defender(self, building: Building) -> None:
+    def _spawn_defender(self, building: Building) -> bool:
+        if len(self.defenders) >= MAX_DEFENDERS:
+            return False
         data = BUILD_TYPES["barracks"]
         level = building.level - 1
         squad = self.upgrades["squad"]
@@ -1637,6 +1682,7 @@ class Arena(Widget):
             )
         )
         self._add_ring(building.x, building.y + 20, 14, (0.36, 0.78, 0.52, 1))
+        return True
 
     # ------------------------------------------------------------------
     # Камера

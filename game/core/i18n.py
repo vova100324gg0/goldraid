@@ -90,6 +90,9 @@ EN: dict[str, str] = {
     "+60% урона героя на 20 с": "+60% hero damage for 20 s",
     "Нанять бойца": "Hire fighter",
     "+1 боец к казармам": "+1 fighter to barracks",
+    "Лимит найма исчерпан": "Hire limit reached",
+    "Отряд уже полон": "Squad is full",
+    "осталось {left}/{limit}": "{left}/{limit} left",
     # --- враги -----------------------------------------------------------
     "Гоблин": "Goblin",
     "Бегун": "Runner",
@@ -694,6 +697,34 @@ EN: dict[str, str] = {
     ),
     "• Исправлен номер карты в медальоне": (
         "• Fixed the map number inside the medallion"
+    ),
+    # --- что нового 1.8.0 ------------------------------------------------
+    "• Постройки качаются до 5 уровня — поздние волны больше не стена": (
+        "• Buildings upgrade to level 5 — late waves are no longer a wall"
+    ),
+    "• Больше общих улучшений: оружие, броня и стены": (
+        "• More global upgrades: weapon, armor and walls"
+    ),
+    "• Урон врагов после 15-й волны растёт мягче": (
+        "• Enemy damage grows more gently after wave 15"
+    ),
+    "• Баланс-патч: Кратер, Руины и Цитадель мягче, финальные волны — по силам": (
+        "• Balance patch: Crater, Ruins and Citadel eased, final waves are fair"
+    ),
+    "• Первые карты стали чуть сложнее — интереснее с самого начала": (
+        "• Early maps are slightly harder — more engaging from the start"
+    ),
+    "• Руины: дороги стали извилистее — башни дольше держат врагов под огнём": (
+        "• Ruins: winding roads keep enemies under tower fire longer"
+    ),
+    "• Наём бойцов ограничен шестью за бой — остаток виден на кнопке": (
+        "• Hiring is capped at six per battle — the remainder is shown on the button"
+    ),
+    "• Портреты героев в катсценах: Рейн, Старейшина, Мира, Гракх и Владыка Мор": (
+        "• Hero portraits in cutscenes: Rein, the Elder, Mira, Grakh and Lord Mor"
+    ),
+    "• Оптимизация боя: орды врагов и отряды не тормозят кадр": (
+        "• Combat optimization: enemy hordes and squads no longer drop frames"
     ),
 }
 

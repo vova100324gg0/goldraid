@@ -26,6 +26,7 @@ from ..core.config import (
     DISCORD_URL,
     GAME_TITLE,
     GLOBAL_UPGRADES,
+    HIRE_LIMIT,
     SAFE_BOTTOM,
     SAFE_TOP,
     SHOP_ITEMS,
@@ -56,6 +57,7 @@ from .widgets import (
     content_width,
 )
 from .fonts import DISPLAY_FONT
+from .portraits import portrait_texture
 
 
 def _format_duration(seconds: float) -> str:
@@ -2289,10 +2291,25 @@ class ShopOverlay(Overlay):
         self.gold_label.text = t("Золото: {gold}").format(gold=int(self.arena.gold))
         for key, button in self.buttons.items():
             data = SHOP_ITEMS[key]
+            allowed, reason = self.arena.item_available(key)
+            desc = t(data["desc"])
+            if key == "guard":
+                # Лимит найма действует на всех картах. Раньше он был заметен
+                # только на длинных картах, где до него реально доходишь,
+                # поэтому показываем остаток прямо на кнопке.
+                if not allowed and reason:
+                    desc = t(reason)
+                else:
+                    left = max(0, HIRE_LIMIT - self.arena.hired)
+                    desc = "{desc} · {left}".format(
+                        desc=desc,
+                        left=t("осталось {left}/{limit}").format(
+                            left=left, limit=HIRE_LIMIT
+                        ),
+                    )
             button.text = t("{name} · {cost} з.\n{desc}").format(
-                name=t(data["name"]), cost=data["cost"], desc=t(data["desc"])
+                name=t(data["name"]), cost=data["cost"], desc=desc
             )
-            allowed, _reason = self.arena.item_available(key)
             button.disabled = not allowed
 
     def _buy(self, key: str) -> None:
@@ -2606,7 +2623,12 @@ class EndOverlay(Overlay):
 
 
 class StoryPortrait(Widget):
-    """Портрет говорящего: силуэт, нарисованный примитивами."""
+    """Портрет говорящего.
+
+    Если для персонажа есть готовая картинка в ``game/assets/portraits``,
+    показываем её внутри золотого медальона. Иначе рисуем силуэт
+    примитивами (запасной вариант, игра без ассетов тоже работает).
+    """
 
     def __init__(self, **kwargs):
         kwargs.setdefault("size_hint", (None, None))
@@ -2644,6 +2666,19 @@ class StoryPortrait(Widget):
             group, cx, cy, r * 0.86,
             (accent[0], accent[1], accent[2], 0.20), width=1.0,
         )
+        # Готовый портрет из ассетов — поверх нарисованного диска.
+        texture = portrait_texture(self._key)
+        if texture is not None:
+            inset = r * 0.985
+            group.add(Color(1.0, 1.0, 1.0, 1.0))
+            group.add(
+                Rectangle(
+                    texture=texture,
+                    pos=(cx - inset, cy - inset),
+                    size=(inset * 2, inset * 2),
+                )
+            )
+            return
         if self._key is None:
             self._draw_coin(group, cx, cy, r)
             return
@@ -2803,7 +2838,9 @@ class CutsceneOverlay(Overlay):
         buttons = BoxLayout(
             orientation="horizontal",
             size_hint_y=None,
-            height=dp(46),
+            # Высота как у GameButton (dp(58)): иначе кнопки вылезают
+            # вверх и наезжают на счётчик реплик.
+            height=dp(58),
             spacing=dp(8),
         )
         self.skip_button = GameButton(
