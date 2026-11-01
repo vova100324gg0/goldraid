@@ -564,6 +564,15 @@ EN: dict[str, str] = {
     "Начнём с долины. Строй башни, собирай золото — и не пускай врагов к воротам.": (
         "We start with the valley. Build towers, gather gold — and keep the enemies from the gates."
     ),
+    "Сколько их там, за холмами?": (
+        "How many are there, beyond the hills?"
+    ),
+    "Сотни. Может, больше. Но дороги узкие — по одной орде за раз.": (
+        "Hundreds. Maybe more. But the roads are narrow — one horde at a time."
+    ),
+    "И запомни: золото — не награда, а топливо. Без него не будет ни стен, ни башен.": (
+        "And remember: gold isn't a reward, it's fuel. Without it there are no walls and no towers."
+    ),
     # --- брифинги карт ---------------------------------------------------
     "Зелёная долина — спокойные подступы. Три дороги ведут к воротам.": (
         "Green Valley — calm approaches. Three roads lead to the gates."
@@ -574,6 +583,9 @@ EN: dict[str, str] = {
     "Понял. Здесь я и построю первую линию обороны.": (
         "Understood. This is where I'll build the first line of defense."
     ),
+    "Не гонись за каждой монетой. Сначала стены, потом богатство.": (
+        "Don't chase every coin. Walls first, wealth later."
+    ),
     "Каменный перевал. Узкие проходы меж скал — врагам негде развернуться.": (
         "Stone Pass. Narrow gaps between the cliffs — no room for the enemy to spread out."
     ),
@@ -581,6 +593,9 @@ EN: dict[str, str] = {
         "Keep towers right on the roads: in the gorge every shot hits home."
     ),
     "Теснина станет им могилой.": "The gorge will be their grave.",
+    "Только не запрись в ней сам. Оставь себе путь к отходу.": (
+        "Just don't trap yourself in it. Keep yourself a way out."
+    ),
     "Выжженная пустошь дышит жаром. Четыре дороги — и по каждой идёт орда.": (
         "The scorched waste breathes heat. Four roads — and a horde on each."
     ),
@@ -590,6 +605,9 @@ EN: dict[str, str] = {
     "Пусть идут. Чем больше врагов — тем больше золота.": (
         "Let them come. The more enemies — the more gold."
     ),
+    "Береги бойцов. В пустоши они дороже золота.": (
+        "Take care of your fighters. In the waste they're worth more than gold."
+    ),
     "Дремучий лес. Чаща скрывает подходы — врагов увидишь поздно.": (
         "Deep Forest. The thicket hides the approaches — you'll see enemies late."
     ),
@@ -597,6 +615,9 @@ EN: dict[str, str] = {
         "But the trees cramp their ranks. Place towers on the trails and keep fighters ready."
     ),
     "Проберёмся сквозь чащу.": "We'll make it through the thicket.",
+    "В лесу тишина обманчива. Если птицы замолчали — жди беды.": (
+        "In the forest, silence is deceptive. If the birds go quiet — expect trouble."
+    ),
     "Студёная теснина. Камни покрыты льдом, дорога узкая, а враги не дают передышки.": (
         "Frozen Gorge. Stones are ice-coated, the road is narrow, and enemies give no respite."
     ),
@@ -605,6 +626,9 @@ EN: dict[str, str] = {
     ),
     "Холод им не помеха, но крепкие стены — помеха.": (
         "Cold doesn't stop them, but solid walls do."
+    ),
+    "На льду враги скользят. Бей, пока они не встали ровно.": (
+        "Enemies slip on the ice. Strike before they steady themselves."
     ),
     "Пылающий кратер. Пять дорог, раскалённая земля и бесконечные орды.": (
         "Burning Crater. Five roads, scorched land and endless hordes."
@@ -615,6 +639,9 @@ EN: dict[str, str] = {
     "Я выстою. Ради каждого, кто остался дома.": (
         "I will hold. For everyone who stayed home."
     ),
+    "Пять дорог — и ни одного безопасного отхода. Держи центр, Рейн.": (
+        "Five roads — and not one safe retreat. Hold the center, Rayn."
+    ),
     "Забытые руины. Древние стены рассыпались, но дороги и золото остались.": (
         "Forgotten Ruins. The ancient walls have crumbled, but roads and gold remain."
     ),
@@ -622,6 +649,9 @@ EN: dict[str, str] = {
         "There's more gold here than anywhere. And more enemies, too."
     ),
     "Соберу всё до последней монеты.": "I'll gather every last coin.",
+    "Древние строили эти стены не от гоблинов. Но и они пали.": (
+        "The ancients didn't build these walls against goblins. Yet they fell too."
+    ),
     "Тёмная цитадель. Небо затянуто гарью, и сам владыка ждёт у ворот.": (
         "Dark Citadel. The sky is choked with soot, and the Warlord himself waits at the gates."
     ),
@@ -634,6 +664,9 @@ EN: dict[str, str] = {
     "Рейн, на последней волне придёт он сам. Не дрогни.": (
         "Rayn, he will come himself on the final wave. Do not waver."
     ),
+    "Войска владыки уже в воротах. Отступать некуда — и не нужно.": (
+        "The Warlord's troops are already at the gates. No retreat — and none needed."
+    ),
     # --- эпилоги ---------------------------------------------------------
     "Долина свободна. Гоблины отступили к перевалу.": (
         "The valley is free. The goblins have fallen back to the pass."
@@ -641,17 +674,32 @@ EN: dict[str, str] = {
     "Идём дальше. Каждая монета — ещё один камень в нашей стене.": (
         "Onward. Every coin is another stone in our wall."
     ),
+    "По дорогам уже идут первые обозы. Люди поверили, что мы удержимся.": (
+        "The first supply carts are already on the roads. People believe we can hold."
+    ),
     "Перевал наш. Теснина приняла врагов, но не пропустила.": (
         "The pass is ours. The gorge took the enemies but let none through."
+    ),
+    "Один рубеж позади. Впереди — выжженная пустошь.": (
+        "One frontier behind us. Ahead lies the scorched waste."
     ),
     "Пустошь очищена. Пепел врагов развеял ветер.": (
         "The waste is cleared. The wind scattered the enemies' ashes."
     ),
+    "Здесь не растёт ничего, но золото лежит даже под пеплом.": (
+        "Nothing grows here, but gold lies even under the ash."
+    ),
     "Лес снова молчит. Чаща нам помогла.": (
         "The forest is silent again. The thicket helped us."
     ),
+    "Птицы вернулись. Значит, можно идти дальше.": (
+        "The birds have returned. That means we can move on."
+    ),
     "Студёная теснина выстояла. Даже холод не остановил тебя.": (
         "The Frozen Gorge held. Even the cold didn't stop you."
+    ),
+    "Половина пути позади. Дыши глубже — впереди жар кратера.": (
+        "Half the road is behind us. Breathe deep — the heat of the crater lies ahead."
     ),
     "Кратер затих. Раскалённая земля впервые остывает.": (
         "The crater has gone quiet. The scorched land cools for the first time."
@@ -659,13 +707,22 @@ EN: dict[str, str] = {
     "Слишком близко к цитадели. Дальше будет тяжелее.": (
         "Too close to the citadel. It only gets harder from here."
     ),
+    "Передохни, Рейн. За кратером начинаются древние руины.": (
+        "Rest a while, Rayn. Beyond the crater the ancient ruins begin."
+    ),
     "Руины снова молчат. Дороги наши, и золото — тоже.": (
         "The ruins are silent again. The roads are ours, and the gold too."
+    ),
+    "Древние не смогли удержаться. Ты смог. Впереди — последний рубеж.": (
+        "The ancients couldn't hold. You did. Ahead lies the final frontier."
     ),
     "Тёмный владыка пал. Небо над цитаделью впервые за годы очистилось.": (
         "The Dark Warlord has fallen. The sky above the citadel clears for the first time in years."
     ),
     "Мы выстояли.": "We held.",
+    "Ворота открыты. Города ждут своего героя.": (
+        "The gates are open. The cities await their hero."
+    ),
     # --- развязка --------------------------------------------------------
     "Рейн, вся земля говорит о тебе. Восемь рубежей — и ни одного промаха.": (
         "Rayn, the whole land speaks of you. Eight frontiers — and not a single miss."
@@ -675,6 +732,9 @@ EN: dict[str, str] = {
     ),
     "Это не конец. Пусть только попробуют прийти снова — ворота выстоят.": (
         "This isn't the end. Let them try to come again — the gates will hold."
+    ),
+    "Ты не просто защитил золото. Ты вернул нам надежду.": (
+        "You didn't just defend the gold. You gave us back our hope."
     ),
     "Кампания пройдена. Теперь ты — легенда Золотого рейда.": (
         "Campaign complete. Now you are a legend of the Golden Raid."
