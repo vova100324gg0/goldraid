@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Сборка APK «Золотой рейд» на Linux или в WSL2.
 # Запуск:  bash build_apk.sh
-# Результат: bin/goldraid-1.0.0-*-debug.apk и копия в apk/
+# Результат: bin/goldraid-*-debug.apk и копия в apk/
 
 set -euo pipefail
 

@@ -157,12 +157,16 @@ class Progress:
                 best = max(0, int(daily.get("best", 0)))
             except (TypeError, ValueError):
                 best = 0
+            try:
+                streak = max(0, int(daily.get("streak", 0)))
+            except (TypeError, ValueError):
+                streak = 0
             self.daily = {
                 "date": str(daily.get("date", "")),
                 "best": best,
                 "done": bool(daily.get("done", False)),
                 "win": bool(daily.get("win", False)),
-                "streak": max(0, int(daily.get("streak", 0))),
+                "streak": streak,
             }
         # Карты, добавленные в обновлении, открываются тем, кто уже прошёл
         # предыдущую: переигрывать старую карту не нужно.
@@ -203,10 +207,13 @@ class Progress:
                 "story": dict(self.story),
                 "daily": dict(self.daily),
             }
-            self.path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            data = json.dumps(payload, ensure_ascii=False, indent=2)
+            # Атомарная запись: сначала во временный файл рядом, затем
+            # os.replace. Если игра закроется в момент записи, старый
+            # прогресс останется целым, а не превратится в обрезок JSON.
+            tmp = self.path.with_name(self.path.name + ".tmp")
+            tmp.write_text(data, encoding="utf-8")
+            os.replace(tmp, self.path)
         except Exception:
             # Прогресс не критичен для игры: молча живём без сохранения.
             pass
@@ -269,9 +276,10 @@ class Progress:
         if self.daily.get("date") != today:
             yesterday = (date.today() - timedelta(days=1)).isoformat()
             streak = int(self.daily.get("streak", 0))
-            if bool(self.daily.get("win", False)) and self.daily.get("date") == yesterday:
-                streak += 1
-            else:
+            # Серия — это подряд сыгранные дни. Продлеваем её, только если
+            # вчера в ежедневную карту действительно играли; иначе сброс.
+            if not (bool(self.daily.get("done", False))
+                    and self.daily.get("date") == yesterday):
                 streak = 0
             self.daily = {
                 "date": today,
@@ -288,14 +296,19 @@ class Progress:
 
     def record_daily(self, waves: int, win: bool) -> None:
         entry = self.daily_of_today()
+        first_try = not bool(entry.get("done", False))
         was_win = bool(entry.get("win", False))
         entry["best"] = max(int(entry.get("best", 0)), max(0, int(waves)))
         entry["done"] = True
         entry["win"] = was_win or bool(win)
-        if win and not was_win:
-            self.counters["daily_wins"] = (
-                int(self.counters.get("daily_wins", 0)) + 1
-            )
+        if first_try:
+            # День сыгран — продлеваем серию. Первый день даёт 1, каждый
+            # следующий подряд — на единицу больше.
+            entry["streak"] = max(1, int(entry.get("streak", 0)) + 1)
+            if win:
+                self.counters["daily_wins"] = (
+                    int(self.counters.get("daily_wins", 0)) + 1
+                )
         self.daily = entry
         self.save()
 
@@ -362,15 +375,19 @@ class Progress:
 
     def add_run(self, run: dict) -> None:
         """Учитывает завершённый бой в общих счётчиках и рекордах."""
+        tutorial = bool(run.get("tutorial"))
         self.counters["runs"] += 1
-        if run.get("win"):
+        if run.get("win") and not tutorial:
             self.counters["wins"] += 1
         self.counters["bosses"] += max(0, int(run.get("bosses_killed", 0)))
         self.counters["buildings"] += max(0, int(run.get("buildings_built", 0)))
         self.counters["gold"] += max(0, int(run.get("gold_earned", 0)))
         self.counters["waves"] += max(0, int(run.get("waves", 0)))
         self.counters["kills"] += max(0, int(run.get("kills", 0)))
-        self._update_records(run)
+        # Обучение не идёт в личные рекорды и не даёт «первую победу»:
+        # настоящий бой начинается только с кампании.
+        if not tutorial:
+            self._update_records(run)
         self.save()
 
     def _update_records(self, run: dict) -> None:

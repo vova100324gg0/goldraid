@@ -295,14 +295,15 @@ EN: dict[str, str] = {
     "Выбери постройку на нижней панели": "Pick a building on the bottom panel",
     "+{amount} золота": "+{amount} gold",
     "Герой вернулся в бой": "The hero is back in the fight",
-    "Герой пал! Вернётся через 4 с": "The hero has fallen! Back in 4 s",
-    "Герой пал от взрыва! Вернётся через 4 с": (
-        "The hero fell in an explosion! Back in 4 s"
+    "Герой пал! Вернётся через {n} с": "The hero has fallen! Back in {n} s",
+    "Герой пал от взрыва! Вернётся через {n} с": (
+        "The hero fell in an explosion! Back in {n} s"
     ),
     "База под атакой!": "The base is under attack!",
     "{name} разрушена!": "{name} destroyed!",
     "Босс повержен!": "Boss defeated!",
     "Вожак повержен!": "Chief defeated!",
+    "Тёмный владыка повержен!": "The Dark Warlord is defeated!",
     "АЛЫЙ БОСС ВЕДЁТ АРМИЮ!": "THE CRIMSON BOSS LEADS THE ARMY!",
     "Вожак ведёт отряд!": "A chief leads the squad!",
     "Волна {wave} отбита! +{bonus} золота": "Wave {wave} repelled! +{bonus} gold",
@@ -412,7 +413,7 @@ EN: dict[str, str] = {
     "БЕСКОНЕЧНЫЙ РЕЖИМ · ВОЛНА {n}": "ENDLESS MODE · WAVE {n}",
     "ЕЖЕДНЕВНАЯ КАРТА · ВОЛНА {n}": "DAILY MAP · WAVE {n}",
     "ЕЩЁ РАЗ": "AGAIN",
-    "СЕГОДНЯ ПРОЙДЕНО": "DONE TODAY",
+    "ПОПЫТКА ИСПОЛЬЗОВАНА": "ATTEMPT USED",
     "Новый рекорд!": "New record!",
     "Лучший результат: волна {n}": "Best result: wave {n}",
     "Возвращайся завтра за новой картой": (
@@ -543,7 +544,7 @@ EN: dict[str, str] = {
     "Рейн": "Rayn",
     "Старейшина": "Elder",
     "Мира": "Mira",
-    "Гракх": "Grаkh",
+    "Гракх": "Grakh",
     "Владыка Мор": "Warlord Mor",
     # --- вступление ------------------------------------------------------
     "Векá золото лежало под зелёными холмами, и векá никто не тревожил эти земли.": (

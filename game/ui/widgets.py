@@ -599,7 +599,12 @@ class HUD(FloatLayout):
             size_hint=(1, None),
             height=dp(158) + dp(SAFE_TOP),
             pos_hint={"top": 1},
-            padding=(dp(9) + dp(SAFE_SIDE), dp(7) + dp(SAFE_TOP)),
+            padding=(
+                dp(9) + dp(SAFE_SIDE),
+                dp(7) + dp(SAFE_TOP),
+                dp(9) + dp(SAFE_SIDE),
+                dp(7),
+            ),
             spacing=dp(5),
         )
         # Полупрозрачная подложка: текст не теряется на фоне замка.
@@ -1231,13 +1236,25 @@ class WavePrompt(FloatLayout):
             text_color=(1.0, 0.94, 0.72, 1),
             size_hint=(0.76, None),
             height=dp(50),
-            pos_hint={"center_x": 0.5, "y": 0.145},
+            pos_hint={"center_x": 0.5},
             font_size=sp(10.5),
             radius=15,
         )
         self.button.bind(on_release=lambda *_a: self.on_call())
         self.add_widget(self.button)
+        # Кнопка держится ровно над нижней панелью строительства. Раньше
+        # она стояла на фиксированной высоте и на телефоне налезала на
+        # панель, которая выше из-за отступа безопасной зоны.
+        self.bind(size=self._place_button)
+        self._place_button()
         self.opacity = 0
+
+    def _place_button(self, *_args) -> None:
+        bottom = dp(112) + dp(SAFE_BOTTOM) * 2 + dp(8)
+        self.button.pos_hint = {
+            "center_x": 0.5,
+            "y": bottom / max(1.0, self.height),
+        }
 
     def on_visible(self, _instance, value: bool) -> None:
         self.opacity = 1.0 if value else 0.0

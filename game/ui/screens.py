@@ -1315,7 +1315,7 @@ class WhatsNewOverlay(Overlay):
         box = MenuCard(
             orientation="vertical",
             size_hint=(0.92, None),
-            height=dp(160) + len(lines) * dp(34),
+            height=dp(120) + len(lines) * dp(40),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
             padding=(dp(18), dp(14)),
             spacing=dp(6),
@@ -1857,7 +1857,7 @@ class MenuScreen(Screen):
 
 
 class LevelsScreen(Screen):
-    """Экран выбора карты: обучение и шесть настоящих уровней."""
+    """Экран выбора карты: обучение и восемь настоящих уровней."""
 
     def __init__(self, app_ref, screen_manager, **kwargs):
         super().__init__(**kwargs)
@@ -3212,7 +3212,11 @@ class GameScreen(Screen):
                     else t("Лучший результат: волна {n}").format(n=previous)
                 )
             else:
+                # Сначала фиксируем попытку (и продлеваем серию дней), потом
+                # проверяем достижения: «Постоянство» должно видеть уже
+                # продлённую серию, иначе награда выдаётся днём позже.
                 PROGRESS.record_daily(waves, win)
+                new_achievements += check_achievements(PROGRESS, run)
                 self.end.open(
                     win, stats, 3 if win else 0, "", t(level.name),
                     new_achievements,
@@ -3222,7 +3226,7 @@ class GameScreen(Screen):
                 )
                 self.end.title.color = (1.0, 0.84, 0.35, 1)
                 self.end.stars_label.text = ""
-                self.end.again_button.text = t("СЕГОДНЯ ПРОЙДЕНО")
+                self.end.again_button.text = t("ПОПЫТКА ИСПОЛЬЗОВАНА")
                 self.end.again_button.disabled = True
                 self.end.unlock_label.text = t(
                     "Возвращайся завтра за новой картой"
@@ -3236,6 +3240,9 @@ class GameScreen(Screen):
             run = dict(stats)
             run["win"] = win
             run["waves"] = waves
+            # Обучение не считается настоящим боем: без этого маркера
+            # победа в обучении выдавала бы «Защитника ворот» и рекорды.
+            run["tutorial"] = True
             PROGRESS.add_run(run)
             new_achievements = check_achievements(PROGRESS, run)
             self.end.open(win, stats, 3 if win else 0, "", t(level.name), new_achievements)
@@ -3335,7 +3342,16 @@ class GameScreen(Screen):
                 return True
             self._toggle_pause(None)
             return True
-        if self.end.visible or self.arena.ended:
+        # Пока открыто любое окно (итоги, пауза, магазин, улучшения,
+        # стройка), игровые горячие клавиши не срабатывают — Esc выше.
+        if (
+            self.arena.ended
+            or self.end.visible
+            or self.pause.visible
+            or self.upgrades.visible
+            or self.shop.visible
+            or self.building_panel.visible
+        ):
             return False
         if 49 <= key <= 52:
             kinds = list(BUILD_TYPES)

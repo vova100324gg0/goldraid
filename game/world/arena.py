@@ -1658,7 +1658,10 @@ class Arena(Widget):
         if hero.hp <= 0:
             hero.hp = 0
             self.respawn_timer = HERO_RESPAWN
-            self.on_toast(t("Герой пал! Вернётся через 4 с"), "bad")
+            self.on_toast(
+                t("Герой пал! Вернётся через {n} с").format(n=int(HERO_RESPAWN)),
+                "bad",
+            )
 
     def _end(self, win: bool) -> None:
         if self.ended:
@@ -1770,12 +1773,13 @@ class Arena(Widget):
         if enemy.boss:
             self.bosses_killed += 1
             self._shake = 14.0
-            self.on_toast(
-                t("Босс повержен!")
-                if enemy.kind == "boss"
-                else t("Вожак повержен!"),
-                "gold",
-            )
+            if enemy.kind == "warlord":
+                message = t("Тёмный владыка повержен!")
+            elif enemy.kind == "boss":
+                message = t("Босс повержен!")
+            else:
+                message = t("Вожак повержен!")
+            self.on_toast(message, "gold")
 
     def _explode_enemy(self, enemy: Enemy) -> None:
         """Бомбист взрывается, задевая всё рядом."""
@@ -1796,7 +1800,12 @@ class Arena(Widget):
             self._add_puff(hero.x, hero.y, (1.0, 0.45, 0.20, 1))
             if hero.hp <= 0:
                 self.respawn_timer = HERO_RESPAWN
-                self.on_toast(t("Герой пал от взрыва! Вернётся через 4 с"), "bad")
+                self.on_toast(
+                    t("Герой пал от взрыва! Вернётся через {n} с").format(
+                        n=int(HERO_RESPAWN)
+                    ),
+                    "bad",
+                )
         bx, by = self.level.base_pos
         if dist(enemy.x, enemy.y, bx, by) <= radius + 40:
             self._damage_base(damage * 0.5)
