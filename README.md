@@ -287,8 +287,8 @@ Buildozer собирает APK только на Linux. В проекте уже
    `powershell -ExecutionPolicy Bypass -File build_apk.ps1`.
 3. **Linux-машина** — `bash build_apk.sh`.
 
-Готовый файл: `goldraid-1.9.0-arm64-v8a_armeabi-v7a-debug.apk`.
-Собранный APK лежит в `apk/` и в `Сборка/Золотой рейд/apk/`, а также
+После сборки файл: `goldraid-1.9.0-arm64-v8a_armeabi-v7a-debug.apk`.
+Собранный APK окажется в `apk/` и в `Сборка/Золотой рейд/apk/`, а также
 на странице загрузки:
 https://vova100324gg0.github.io/goldraid-downloads/
 Подробная пошаговая инструкция — в `СБОРКА APK.txt`.
