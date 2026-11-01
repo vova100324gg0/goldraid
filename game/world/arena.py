@@ -16,6 +16,8 @@ from kivy.uix.widget import Widget
 from .background import build_background
 from ..core.config import (
     BUILD_TYPES,
+    BUILDING_BLOCK_RADIUS,
+    BASE_BLOCK_RADIUS,
     CALL_WAVE_BONUS_BASE,
     CALL_WAVE_BONUS_PER_SECOND,
     ENEMY_TYPES,
@@ -24,9 +26,11 @@ from ..core.config import (
     GOLD_PILE_RANGE,
     GOLD_PILE_RESPAWN,
     GOLD_PILE_VALUE,
+    HERO_ATTACK_ANIM,
     HERO_ATTACK_COOLDOWN,
     HERO_ATTACK_DAMAGE,
     HERO_ATTACK_RANGE,
+    HERO_RADIUS,
     HERO_REGEN,
     HERO_RESPAWN,
     HERO_SPEED,
@@ -61,6 +65,13 @@ _KEYMAP = {
     100: "d", 68: "d", 1074: "d", 1042: "d",
     273: "up", 274: "down", 275: "right", 276: "left",
 }
+
+# Радиус, в котором касание карты в режиме стройки «цепляется» за площадку.
+# Площадка рисуется как эллипс 92×44 (мировые единицы ≈ dp), а палец бьёт
+# примерно на 40 dp мимо — поэтому берём радиус заметно больше площадки.
+# Соседние площадки стоят не ближе ~136 друг к другу, а строим в ближайшую,
+# так что промах на пол-пальца всё равно попадает куда надо.
+BUILD_TAP_RADIUS = 110.0
 
 
 class Arena(Widget):
@@ -171,7 +182,10 @@ class Arena(Widget):
         self.rage_timer = 0.0
         self.build_mode = None
         self._build_focus = None
+        self._build_focus_index = None
         self.time_scale = 1.0
+        # Цель героя в этом кадре: подсвечиваем её и рисуем радиус удара.
+        self.hero_target: Enemy | None = None
 
         self.wave = 1
         self.wave_state = "prep"
@@ -350,6 +364,50 @@ class Arena(Widget):
                 best_d = d
         return best
 
+    def _set_build_focus(self, index: int | None) -> None:
+        """Запоминает площадку-цель, по которой строит кнопка «✓»."""
+        if index is None or index < 0 or index >= len(self.level.slots):
+            self._build_focus_index = None
+            self._build_focus = None
+        else:
+            self._build_focus_index = int(index)
+            self._build_focus = self.level.slots[self._build_focus_index]
+        self.slow_dirty = True
+
+    def build_focus_free_slot(self) -> int | None:
+        """Ближайшая к герою свободная площадка — цель режима стройки."""
+        return self._nearest_free_slot(self.hero.x, self.hero.y, 1e9)
+
+    def cycle_build_focus(self, step: int) -> None:
+        """Переключает площадку-цель по списку свободных (кнопки ◀ ▶)."""
+        if self.build_mode is None:
+            return
+        free = [
+            index
+            for index in range(len(self.level.slots))
+            if self.slot_free(index)
+        ]
+        if not free:
+            self.on_toast(t("Свободных площадок нет"), "bad")
+            return
+        if self._build_focus_index in free:
+            pos = free.index(self._build_focus_index) + int(step)
+        else:
+            pos = 0
+        self._set_build_focus(free[pos % len(free)])
+        self._draw()
+
+    def build_at_focus(self) -> tuple[bool, str]:
+        """Строит выбранное на площадке-цели — без прицеливания пальцем."""
+        if self.build_mode is None:
+            return False, t("Сначала выбери постройку")
+        index = self._build_focus_index
+        if index is None or not self.slot_free(index):
+            index = self.build_focus_free_slot()
+        if index is None:
+            return False, t("Свободных площадок нет")
+        return self.build(index, self.build_mode)
+
     def build(self, index: int, kind: str) -> tuple[bool, str]:
         if kind not in BUILD_TYPES:
             return False, t("Неизвестная постройка")
@@ -379,6 +437,7 @@ class Arena(Widget):
         self.buildings_built += 1
         self.build_mode = None
         self._build_focus = None
+        self._build_focus_index = None
         self.slow_dirty = True
         self._add_ring(x, y + 16, 32, (1.0, 0.86, 0.30, 1))
         self._add_particles(x, y + 26, 10, (1.0, 0.86, 0.36, 1), speed=90)
@@ -511,12 +570,11 @@ class Arena(Widget):
     def set_build_mode(self, kind: str | None) -> str | None:
         """Включает/выключает режим строительства. Возвращает активный тип."""
         self.build_mode = None if self.build_mode == kind else kind
-        # В режиме стройки камера подсказывает ближайшую свободную площадку.
-        self._build_focus = None
+        # В режиме стройки камера подсказывает ближайшую свободную площадку,
+        # а кнопка «✓ Построить» ставит здание по ней — целиться пальцем не надо.
+        self._set_build_focus(None)
         if self.build_mode is not None:
-            index = self._nearest_free_slot(self.hero.x, self.hero.y, 1e9)
-            if index is not None:
-                self._build_focus = self.level.slots[index]
+            self._set_build_focus(self.build_focus_free_slot())
         self.slow_dirty = True
         self._draw()
         return self.build_mode
@@ -664,12 +722,15 @@ class Arena(Widget):
 
         if self.build_mode:
             # На телефоне попасть точно в площадку сложно, поэтому берём
-            # ближайшую свободную площадку в щедром радиусе и подсвечиваем.
-            index = self._nearest_free_slot(wx, wy, 92)
+            # ближайшую свободную площадку в щедром радиусе и строим в неё.
+            index = self._nearest_free_slot(wx, wy, BUILD_TAP_RADIUS)
             if index is not None:
                 ok, message = self.build(index, self.build_mode)
                 self.on_toast(message, "gold" if ok else "bad")
                 return True
+            # Мимо площадок: не строим и ничего не тратим. Касание уходит
+            # джойстику — герой может идти, а цель выбрать кнопками ◀ ▶
+            # и подтвердить большой кнопкой «Построить».
 
         for index, (sx, sy) in enumerate(self.level.slots):
             if dist(wx, wy, sx, sy) > 54 or not self.slot_free(index):
@@ -792,6 +853,7 @@ class Arena(Widget):
 
         hero.invuln = max(0.0, hero.invuln - dt)
         hero.attack_cd -= dt
+        hero.attack_anim = max(0.0, hero.attack_anim - dt)
         hero.hp = min(hero.max_hp, hero.hp + HERO_REGEN * dt)
         ix, iy = self._read_input()
         speed = HERO_SPEED
@@ -805,19 +867,64 @@ class Arena(Widget):
         min_x, min_y, max_x, max_y = self.hero_bounds
         hero.x = clamp(hero.x + hero.vx * dt, min_x, max_x)
         hero.y = clamp(hero.y + hero.vy * dt, min_y, max_y)
+        # Герой должен упираться в постройки и замок, а не проходить сквозь.
+        self._resolve_hero_collision(hero)
         hero.moving = math.hypot(hero.vx, hero.vy) > 12
         if hero.moving:
             hero.facing = math.atan2(hero.vy, hero.vx)
 
-        if hero.attack_cd <= 0:
-            target = self._nearest_enemy(hero.x, hero.y, HERO_ATTACK_RANGE)
-            if target:
-                damage = HERO_ATTACK_DAMAGE + self.upgrades["blade"] * 7
-                if self.rage_timer > 0:
-                    damage *= 1.6
-                self._damage_enemy(target, damage, hero.x, hero.y)
-                hero.attack_cd = HERO_ATTACK_COOLDOWN
-                self._add_slash(hero.x, hero.y, target)
+        target = self._nearest_enemy(hero.x, hero.y, HERO_ATTACK_RANGE)
+        self.hero_target = target
+        if hero.attack_cd <= 0 and target is not None:
+            # Герой разворачивается к цели и замахивается мечом: видно, кого
+            # и куда он бьёт, а не просто «что-то происходит» рядом.
+            hero.facing = math.atan2(target.y - hero.y, target.x - hero.x)
+            damage = HERO_ATTACK_DAMAGE + self.upgrades["blade"] * 7
+            rage = self.rage_timer > 0
+            if rage:
+                damage *= 1.6
+            self._damage_enemy(
+                target, damage, hero.x, hero.y, show_text=True, strong=rage
+            )
+            hero.attack_cd = HERO_ATTACK_COOLDOWN
+            hero.attack_anim = HERO_ATTACK_ANIM
+            self._add_slash(hero.x, hero.y, target, big=rage)
+
+    def _solid_circles(self) -> list[tuple[float, float, float]]:
+        """Препятствия на земле: замок и все постройки."""
+        base_x, base_y = self.level.base_pos
+        circles = [(base_x, base_y, BASE_BLOCK_RADIUS)]
+        for building in self.buildings:
+            circles.append((building.x, building.y, BUILDING_BLOCK_RADIUS))
+        return circles
+
+    def _resolve_hero_collision(self, hero: Hero) -> None:
+        """Выталкивает героя из построек и замка.
+
+        Двух проходов хватает: герой не «застревает» в углу между двумя
+        постройками, а плавно скользит вдоль них.
+        """
+        radius = HERO_RADIUS
+        for _ in range(2):
+            pushed = False
+            for cx, cy, cr in self._solid_circles():
+                dx = hero.x - cx
+                dy = hero.y - cy
+                distance = math.hypot(dx, dy)
+                min_distance = cr + radius
+                if distance >= min_distance:
+                    continue
+                if distance < 1e-4:
+                    dx, dy, distance = 0.0, 1.0, 1.0
+                push = min_distance - distance
+                hero.x += dx / distance * push
+                hero.y += dy / distance * push
+                pushed = True
+            if not pushed:
+                break
+        min_x, min_y, max_x, max_y = self.hero_bounds
+        hero.x = clamp(hero.x, min_x, max_x)
+        hero.y = clamp(hero.y, min_y, max_y)
 
     def _update_defenders(self, dt: float) -> None:
         for defender in list(self.defenders):
@@ -1424,7 +1531,8 @@ class Arena(Widget):
         return best
 
     def _damage_enemy(self, enemy: Enemy, amount: float, source_x: float = 0, source_y: float = 0,
-                      aggro: bool = True) -> None:
+                      aggro: bool = True, show_text: bool = False,
+                      strong: bool = False) -> None:
         if enemy not in self.enemies:
             return
         if enemy.armor > 0:
@@ -1434,8 +1542,32 @@ class Arena(Widget):
         if aggro:
             enemy.aggro = 4.5
         self._add_particles(enemy.x, enemy.y + 20, 2, (0.95, 0.35, 0.24, 1), speed=42)
+        if show_text:
+            self._add_damage_text(enemy.x, enemy.y + 44, amount, strong=strong)
         if enemy.hp <= 0:
             self._kill_enemy(enemy)
+
+    def _add_damage_text(self, x: float, y: float, amount: float,
+                         strong: bool = False) -> None:
+        """Всплывающая цифра урона над врагом.
+
+        Ограничиваем количество, чтобы шквал ударов не засорял экран.
+        """
+        live = sum(1 for effect in self.effects if effect.kind == "dmg")
+        if live >= 14:
+            return
+        color = (1.0, 0.72, 0.28, 1) if strong else (1.0, 0.96, 0.72, 1)
+        self.effects.append(
+            Effect(
+                "dmg",
+                x + random.uniform(-8, 8),
+                y,
+                0.7 if strong else 0.58,
+                text=str(int(round(amount))),
+                color=color,
+                strong=strong,
+            )
+        )
 
     def _kill_enemy(self, enemy: Enemy) -> None:
         if enemy not in self.enemies:
@@ -1555,12 +1687,22 @@ class Arena(Widget):
     def _add_ring(self, x: float, y: float, radius: float, color) -> None:
         self.effects.append(Effect("ring", x, y, 0.55, radius=radius, color=color))
 
-    def _add_slash(self, x: float, y: float, enemy) -> None:
+    def _add_slash(self, x: float, y: float, enemy, big: bool = False) -> None:
         angle = math.atan2(enemy.y - y, enemy.x - x)
-        mx = (x + enemy.x) / 2
-        my = (y + enemy.y) / 2 + 18
+        reach = min(HERO_ATTACK_RANGE * 0.55, dist(x, y, enemy.x, enemy.y))
+        mx = x + math.cos(angle) * reach
+        my = y + math.sin(angle) * reach + 18
         self.effects.append(
-            Effect("slash", mx, my, 0.2, angle=angle, color=(1, 0.95, 0.75, 1))
+            Effect(
+                "slash",
+                mx,
+                my,
+                0.24 if big else 0.2,
+                angle=angle,
+                radius=1.5 if big else 1.0,
+                color=(1.0, 0.86, 0.45, 1) if big else (1, 0.95, 0.75, 1),
+                strong=big,
+            )
         )
 
     def _add_puff(self, x: float, y: float, color) -> None:
@@ -1642,6 +1784,10 @@ class Arena(Widget):
                 affordable=(
                     self.build_mode is None
                     or self.gold >= self.build_cost(self.build_mode)
+                ),
+                focused=(
+                    self.build_mode is not None
+                    and index == self._build_focus_index
                 ),
             )
 

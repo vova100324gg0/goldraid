@@ -90,6 +90,24 @@ ACHIEVEMENTS: list[dict] = [
         "desc": "Уничтожь 1000 врагов за всё время",
         "check": lambda p, run: int(p.counters.get("kills", 0)) >= 1000,
     },
+    {
+        "id": "run_gold",
+        "name": "Золотой поток",
+        "desc": "Заработай 800 золота за один бой",
+        "check": lambda p, run: int(p.records.get("run_gold", 0)) >= 800,
+    },
+    {
+        "id": "streak_3",
+        "name": "Постоянство",
+        "desc": "Открывай ежедневную карту 3 дня подряд",
+        "check": lambda p, run: int(p.daily.get("streak", 0)) >= 3,
+    },
+    {
+        "id": "fast_win",
+        "name": "Молниеносный",
+        "desc": "Пройди любую карту быстрее 4 минут",
+        "check": lambda p, run: 0 < float(p.records.get("fastest_win", 0.0)) <= 240,
+    },
 ]
 
 

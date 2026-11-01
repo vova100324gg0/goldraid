@@ -26,6 +26,7 @@ from ..core.config import (
     GAME_TITLE,
     GLOBAL_UPGRADES,
     SAFE_BOTTOM,
+    SAFE_TOP,
     SHOP_ITEMS,
     TOTAL_WAVES,
     UI_MUTED,
@@ -44,6 +45,7 @@ from .widgets import (
     BuildBar,
     GameButton,
     HUD,
+    ModeCard,
     Overlay,
     RibbonLabel,
     StarRow,
@@ -51,6 +53,13 @@ from .widgets import (
     WavePrompt,
 )
 from .fonts import DISPLAY_FONT
+
+
+def _format_duration(seconds: float) -> str:
+    """Секунды в вид «М:СС» для экрана рекордов."""
+    total = max(0, int(round(seconds)))
+    minutes, secs = divmod(total, 60)
+    return f"{minutes}:{secs:02d}"
 
 
 class Backdrop(FloatLayout):
@@ -1062,14 +1071,16 @@ class AchievementsOverlay(Overlay):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         count = len(ACHIEVEMENTS)
+        self._desired_height = dp(246) + count * dp(42)
         box = MenuCard(
             orientation="vertical",
             size_hint=(0.92, None),
-            height=dp(200) + count * dp(42),
+            height=self._desired_height,
             pos_hint={"center_x": 0.5, "center_y": 0.5},
             padding=(dp(18), dp(14)),
             spacing=dp(6),
         )
+        self._box = box
         self.title = Label(
             text=t("ДОСТИЖЕНИЯ"),
             font_size=sp(23),
@@ -1096,6 +1107,33 @@ class AchievementsOverlay(Overlay):
         self.counter.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         box.add_widget(self.counter)
 
+        self.records_button = GameButton(
+            t("РЕКОРДЫ"),
+            color=(0.22, 0.30, 0.44, 1),
+            text_color=(0.90, 0.95, 1.0, 1),
+            height=dp(40),
+            radius=12,
+            font_size=sp(12),
+        )
+        box.add_widget(self.records_button)
+
+        # Список достижений прокручивается: на невысоких экранах он не
+        # помещается целиком, а кнопка «Закрыть» всегда остаётся внизу.
+        rows_box = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=dp(6),
+        )
+        rows_box.bind(minimum_height=rows_box.setter("height"))
+        self.scroll = ScrollView(
+            size_hint=(1, 1),
+            do_scroll_x=False,
+            bar_width=0,
+            scroll_type=["bars", "content"],
+        )
+        self.scroll.add_widget(rows_box)
+        box.add_widget(self.scroll)
+
         self.rows = []
         for _item in ACHIEVEMENTS:
             label = Label(
@@ -1104,6 +1142,88 @@ class AchievementsOverlay(Overlay):
                 color=(0.70, 0.78, 0.72, 1),
                 size_hint_y=None,
                 height=dp(42),
+                halign="left",
+                valign="middle",
+            )
+            label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+            rows_box.add_widget(label)
+            self.rows.append(label)
+
+        self.close_button = GameButton(
+            t("ЗАКРЫТЬ"),
+            color=(0.22, 0.24, 0.28, 1),
+            height=dp(44),
+            radius=12,
+            font_size=sp(14),
+        )
+        box.add_widget(self.close_button)
+
+        self.add_panel(box)
+
+    def on_visible(self, _instance, value) -> None:
+        if value:
+            available = self.height - dp(24)
+            if available < dp(80):
+                available = self._desired_height
+            self._box.height = max(
+                dp(280), min(self._desired_height, available)
+            )
+        super().on_visible(_instance, value)
+
+    def open(self, *_args) -> None:
+        self.refresh()
+        super().open()
+
+    def refresh(self) -> None:
+        unlocked = unlocked_count(PROGRESS)
+        self.counter.text = t("ОТКРЫТО {unlocked} ИЗ {total}").format(
+            unlocked=unlocked, total=len(ACHIEVEMENTS)
+        )
+        for item, label in zip(ACHIEVEMENTS, self.rows):
+            done = PROGRESS.has_achievement(item["id"])
+            mark = "★ " if done else "• "
+            label.text = mark + f"{t(item['name'])}\n{t(item['desc'])}"
+            label.color = (
+                (1.0, 0.86, 0.44, 1) if done else (0.60, 0.68, 0.62, 1)
+            )
+
+
+class RecordsOverlay(Overlay):
+    """Личные рекорды: волны, золото, убийства и время."""
+
+    dim_alpha = 0.55
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        box = MenuCard(
+            orientation="vertical",
+            size_hint=(0.9, None),
+            height=dp(438),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            padding=(dp(18), dp(14)),
+            spacing=dp(4),
+        )
+        self.title = Label(
+            text=t("РЕКОРДЫ"),
+            font_size=sp(23),
+            bold=True,
+            color=(1.0, 0.84, 0.35, 1),
+            size_hint_y=None,
+            height=dp(36),
+            halign="center",
+            valign="middle",
+        )
+        self.title.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
+        box.add_widget(self.title)
+
+        self.rows = []
+        for _ in range(9):
+            label = Label(
+                text="",
+                font_size=sp(12),
+                color=(0.86, 0.93, 0.88, 1),
+                size_hint_y=None,
+                height=dp(30),
                 halign="left",
                 valign="middle",
             )
@@ -1127,17 +1247,37 @@ class AchievementsOverlay(Overlay):
         super().open()
 
     def refresh(self) -> None:
-        unlocked = unlocked_count(PROGRESS)
-        self.counter.text = t("ОТКРЫТО {unlocked} ИЗ {total}").format(
-            unlocked=unlocked, total=len(ACHIEVEMENTS)
+        records = PROGRESS.records
+        counters = PROGRESS.counters
+        stars = sum(
+            int(value.get("stars", 0)) for value in PROGRESS.best.values()
         )
-        for item, label in zip(ACHIEVEMENTS, self.rows):
-            done = PROGRESS.has_achievement(item["id"])
-            mark = "★ " if done else "• "
-            label.text = mark + f"{t(item['name'])}\n{t(item['desc'])}"
-            label.color = (
-                (1.0, 0.86, 0.44, 1) if done else (0.60, 0.68, 0.62, 1)
-            )
+        maps = sum(
+            1 for value in PROGRESS.best.values() if value.get("win")
+        )
+        fastest = float(records.get("fastest_win", 0.0))
+        fastest_text = "—" if fastest <= 0 else _format_duration(fastest)
+        lines = [
+            t("Лучшая волна (бесконечный): {n}").format(
+                n=int(PROGRESS.endless_best)
+            ),
+            t("Золото за один бой: {n}").format(
+                n=int(records.get("run_gold", 0))
+            ),
+            t("Убийств за один бой: {n}").format(
+                n=int(records.get("run_kills", 0))
+            ),
+            t("Самая быстрая победа: {v}").format(v=fastest_text),
+            t("Всего золота: {n}").format(n=int(counters.get("gold", 0))),
+            t("Всего убийств: {n}").format(n=int(counters.get("kills", 0))),
+            t("Отбито волн: {n}").format(n=int(counters.get("waves", 0))),
+            t("Карт пройдено: {done} из {total}").format(
+                done=maps, total=len(LEVELS)
+            ),
+            t("Звёзд собрано: {n}").format(n=stars),
+        ]
+        for label, text in zip(self.rows, lines):
+            label.text = text
 
 
 class WhatsNewOverlay(Overlay):
@@ -1227,32 +1367,36 @@ class MenuScreen(Screen):
         )
         self.add_widget(self.scroll)
 
-        self._base_height = dp(344)
+        self._base_height = dp(507)
         self.column = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
             height=self._base_height,
-            padding=(dp(13), 0, dp(13), 0),
+            padding=(dp(14), 0, dp(14), 0),
         )
         self.scroll.add_widget(self.column)
 
         # ---------------------------------------------------------- бренд
-        brand = FloatLayout(size_hint_y=None, height=dp(164))
+        # Emblem сверху, затем название и лента. Отступ сверху задаёт
+        # _fit_column: раньше бренд «прилипал» к самой кромке экрана.
+        brand = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            height=dp(166),
+        )
         self.emblem = CoinEmblem()
-        self.emblem.pos_hint = {"center_x": 0.5, "top": 0.995}
-        brand.add_widget(self.emblem)
+        brand.add_widget(self._holder(self.emblem, dp(96)))
 
         title = Label(
             text=t(GAME_TITLE),
             font_name=DISPLAY_FONT,
-            font_size=sp(31),
+            font_size=sp(30),
             bold=True,
             color=(1.0, 0.84, 0.35, 1),
             outline_color=(0.28, 0.14, 0.02, 0.65),
             outline_width=dp(1.1),
             size_hint=(1, None),
-            height=dp(42),
-            pos_hint={"center_x": 0.5, "y": 0.17},
+            height=dp(38),
             halign="center",
             valign="middle",
         )
@@ -1265,104 +1409,137 @@ class MenuScreen(Screen):
             font_size=sp(9.5),
             color=(0.86, 0.94, 0.80, 0.96),
             size_hint=(None, None),
-            width=dp(236),
+            width=dp(238),
             height=dp(24),
-            pos_hint={"center_x": 0.5, "y": 0.0},
         )
-        brand.add_widget(tagline)
+        brand.add_widget(self._holder(tagline, dp(30)))
 
         self.column.add_widget(brand)
-        self.column.add_widget(self._spacer(12))
-
-        # ---------------------------------------------- продолжить / играть
-        self.continue_button = GameButton(
-            text=t("ПРОДОЛЖИТЬ"),
-            color=(0.16, 0.56, 0.30, 1),
-            text_color=(0.96, 1.0, 0.96, 1),
-            height=dp(64),
-            radius=18,
-            font_size=sp(22),
-        )
-        self.continue_button.bind(on_release=self._continue)
-        self.column.add_widget(self.continue_button)
-        self.column.add_widget(self._spacer(9))
-
-        self.play_button = GameButton(
-            text=t("ИГРАТЬ · КАРТЫ И РЕЖИМЫ"),
-            color=(0.22, 0.36, 0.66, 1),
-            text_color=(0.94, 0.97, 1.0, 1),
-            height=dp(56),
-            radius=16,
-            font_size=sp(16),
-        )
-        self.play_button.bind(on_release=self._open_levels)
-        self.column.add_widget(self.play_button)
-        self.column.add_widget(self._spacer(9))
+        self.column.add_widget(self._spacer(6))
 
         # -------------------------------------------------- строка прогресса
         self.progress_label = Label(
             text="",
-            font_size=sp(10),
+            font_size=sp(10.5),
             bold=True,
-            color=UI_MUTED,
+            color=(1.0, 0.90, 0.62, 0.96),
             size_hint_y=None,
-            height=dp(20),
+            height=dp(24),
             halign="center",
             valign="middle",
         )
         self.progress_label.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         self.column.add_widget(self.progress_label)
+        self.column.add_widget(self._spacer(12))
+
+        # -------------------------------------------------- главная кнопка
+        self.continue_button = GameButton(
+            text=t("ПРОДОЛЖИТЬ"),
+            color=(0.16, 0.56, 0.30, 1),
+            text_color=(0.96, 1.0, 0.96, 1),
+            height=dp(68),
+            radius=18,
+            font_size=sp(22),
+        )
+        self.continue_button.bind(on_release=self._continue)
+        self.column.add_widget(self.continue_button)
         self.column.add_widget(self._spacer(10))
 
-        # ------------------- «ОБ АВТОРЕ»: маленькая кнопка у нижнего края
-        # Держим её отдельно от прокручиваемой колонки, чтобы она всегда
-        # была прижата к самому низу экрана, а не «висела» в середине.
-        self.bottom_bar = FloatLayout(
-            size_hint=(1, None),
-            height=dp(46) + dp(SAFE_BOTTOM),
-            pos_hint={"x": 0, "y": 0},
+        # ---------------------------------------- витрина режимов 2×2
+        row1 = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(106),
+            spacing=dp(9),
         )
-        self.achievements_button = GameButton(
-            text=t("ДОСТИЖЕНИЯ"),
-            color=(0.24, 0.20, 0.10, 1),
-            text_color=(1.0, 0.90, 0.62, 1),
-            size_hint=(None, None),
-            width=dp(126),
-            height=dp(34),
-            radius=11,
-            font_size=sp(9.5),
-            pos_hint={"center_x": 0.17, "center_y": 0.5},
+        self.play_button = ModeCard(
+            title=t("КАМПАНИЯ"),
+            subtitle="",
+            icon="base",
+            color=(0.22, 0.36, 0.66, 1),
+            text_color=(0.95, 0.97, 1.0, 1),
+            sub_color=(0.74, 0.83, 0.97, 1),
+        )
+        self.play_button.bind(on_release=self._open_levels)
+        row1.add_widget(self.play_button)
+
+        self.daily_button = ModeCard(
+            title=t("ЕЖЕДНЕВНАЯ"),
+            subtitle="",
+            icon="coin",
+            color=(0.40, 0.27, 0.10, 1),
+            text_color=(1.0, 0.92, 0.66, 1),
+            sub_color=(0.94, 0.83, 0.58, 1),
+        )
+        self.daily_button.bind(on_release=self._play_daily)
+        row1.add_widget(self.daily_button)
+        self.column.add_widget(row1)
+        self.column.add_widget(self._spacer(9))
+
+        row2 = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(106),
+            spacing=dp(9),
+        )
+        self.endless_button = ModeCard(
+            title=t("БЕСКОНЕЧНЫЙ"),
+            subtitle="",
+            icon="speed",
+            color=(0.32, 0.24, 0.54, 1),
+            text_color=(0.95, 0.93, 1.0, 1),
+            sub_color=(0.80, 0.76, 0.98, 1),
+        )
+        self.endless_button.bind(on_release=self._play_endless)
+        row2.add_widget(self.endless_button)
+
+        self.achievements_button = ModeCard(
+            title=t("ДОСТИЖЕНИЯ"),
+            subtitle="",
+            icon="star",
+            color=(0.15, 0.30, 0.29, 1),
+            text_color=(0.94, 1.0, 0.97, 1),
+            sub_color=(0.72, 0.92, 0.84, 1),
         )
         self.achievements_button.bind(on_release=self._open_achievements)
-        self.bottom_bar.add_widget(self.achievements_button)
+        row2.add_widget(self.achievements_button)
+        self.column.add_widget(row2)
+
+        # ------------------- нижняя панель: настройки и об авторе
+        # Держим её отдельно от прокручиваемой колонки, чтобы кнопки всегда
+        # были прижаты к самому низу экрана, а не «висели» в середине.
+        self.bottom_bar = FloatLayout(
+            size_hint=(1, None),
+            height=dp(52) + dp(SAFE_BOTTOM),
+            pos_hint={"x": 0, "y": 0},
+        )
+        self.settings_button = GameButton(
+            text=t("НАСТРОЙКИ"),
+            color=(0.15, 0.24, 0.30, 1),
+            text_color=(0.84, 0.93, 1.0, 1),
+            size_hint=(None, None),
+            width=dp(156),
+            height=dp(42),
+            radius=12,
+            font_size=sp(11),
+            pos_hint={"center_x": 0.29, "center_y": 0.5},
+        )
+        self.settings_button.bind(on_release=self._open_settings)
+        self.bottom_bar.add_widget(self.settings_button)
 
         self.about_button = GameButton(
             text=t("ОБ АВТОРЕ"),
             color=(0.17, 0.20, 0.25, 1),
             text_color=(0.84, 0.89, 0.94, 1),
             size_hint=(None, None),
-            width=dp(126),
-            height=dp(34),
-            radius=11,
-            font_size=sp(9.5),
-            pos_hint={"center_x": 0.5, "center_y": 0.5},
+            width=dp(156),
+            height=dp(42),
+            radius=12,
+            font_size=sp(11),
+            pos_hint={"center_x": 0.71, "center_y": 0.5},
         )
         self.about_button.bind(on_release=self._open_info)
         self.bottom_bar.add_widget(self.about_button)
-
-        self.settings_button = GameButton(
-            text=t("НАСТРОЙКИ"),
-            color=(0.15, 0.24, 0.30, 1),
-            text_color=(0.84, 0.93, 1.0, 1),
-            size_hint=(None, None),
-            width=dp(126),
-            height=dp(34),
-            radius=11,
-            font_size=sp(9.5),
-            pos_hint={"center_x": 0.83, "center_y": 0.5},
-        )
-        self.settings_button.bind(on_release=self._open_settings)
-        self.bottom_bar.add_widget(self.settings_button)
         self.add_widget(self.bottom_bar)
 
         self.scroll.bind(size=self._fit_column)
@@ -1390,7 +1567,14 @@ class MenuScreen(Screen):
         self.achievements.close_button.bind(
             on_release=lambda *_a: self.achievements.close()
         )
+        self.achievements.records_button.bind(on_release=self._open_records)
         self.add_widget(self.achievements)
+
+        self.records = RecordsOverlay()
+        self.records.close_button.bind(
+            on_release=lambda *_a: self.records.close()
+        )
+        self.add_widget(self.records)
 
         self.whats_new = WhatsNewOverlay()
         self.whats_new.close_button.bind(
@@ -1405,21 +1589,36 @@ class MenuScreen(Screen):
     def _spacer(height: float) -> Widget:
         return Widget(size_hint_y=None, height=height)
 
+    @staticmethod
+    def _holder(widget: Widget, height: float) -> FloatLayout:
+        """Центрирует виджет по горизонтали в полосе заданной высоты."""
+        box = FloatLayout(size_hint_y=None, height=height)
+        widget.pos_hint = {"center_x": 0.5, "center_y": 0.5}
+        box.add_widget(widget)
+        return box
+
     def _fit_column(self, *_args) -> None:
-        """Растягивает колонку на высоту экрана и делит лишнее на отступы."""
+        """Даёт бренду воздух сверху, а лишнее место отдаёт низу.
+
+        Раньше свободное место делилось почти пополам, и эмблема с
+        названием «висели» у самой кромки экрана. Теперь сверху всегда
+        есть отступ, поэтому меню дышит даже на высоких телефонах.
+        """
         reserve = self.bottom_bar.height + dp(6)
         viewport = max(dp(1), self.scroll.height)
         base = self._base_height
         usable = max(dp(1), viewport - reserve)
-        if usable <= base + dp(1):
+        top_min = dp(30) + dp(SAFE_TOP)
+        if usable <= base + top_min:
             self.column.height = usable
-            self.column.padding = (dp(13), 0, dp(13), 0)
+            self.column.padding = (dp(14), 0, dp(14), 0)
             return
         extra = usable - base
-        top = int(extra * 0.45)
+        top = top_min + int((extra - top_min) * 0.28)
+        top = min(top, dp(104) + dp(SAFE_TOP))
         bottom = int(extra) - top
         self.column.height = usable
-        self.column.padding = (dp(13), top, dp(13), bottom)
+        self.column.padding = (dp(14), top, dp(14), bottom)
         Clock.schedule_once(lambda _dt: self.emblem._redraw(), 0)
 
     def on_enter(self) -> None:
@@ -1455,14 +1654,54 @@ class MenuScreen(Screen):
             self.progress_label.text = t(
                 "СНАЧАЛА — КОРОТКОЕ ОБУЧЕНИЕ · 3 ВОЛНЫ"
             )
-            return
-        unlocked = max(1, min(len(LEVELS), PROGRESS.unlocked))
-        text = t("ОТКРЫТО КАРТ: {unlocked} ИЗ {total}").format(
-            unlocked=unlocked, total=len(LEVELS)
+        else:
+            unlocked = max(1, min(len(LEVELS), PROGRESS.unlocked))
+            text = t("ОТКРЫТО КАРТ: {unlocked} ИЗ {total}").format(
+                unlocked=unlocked, total=len(LEVELS)
+            )
+            if PROGRESS.tutorial_done:
+                text += t("  ·  обучение пройдено")
+            self.progress_label.text = text
+
+        # Витрина режимов: подписи обновляются без пересоздания карточек.
+        self.play_button.set_text(
+            t("КАМПАНИЯ"), t("{n} КАРТ").format(n=len(LEVELS))
         )
-        if PROGRESS.tutorial_done:
-            text += t("  ·  обучение пройдено")
-        self.progress_label.text = text
+
+        daily = PROGRESS.daily_of_today()
+        if daily.get("done"):
+            self.daily_button.set_text(
+                t("ЕЖЕДНЕВНАЯ"),
+                t("ПРОЙДЕНА · ВОЛНА {n}").format(n=int(daily.get("best", 0))),
+            )
+            self.daily_button.disabled = True
+        else:
+            self.daily_button.set_text(t("ЕЖЕДНЕВНАЯ"), t("НОВАЯ КАРТА ДНЯ"))
+            self.daily_button.disabled = False
+
+        best = int(PROGRESS.endless_best)
+        if best > 0:
+            self.endless_button.set_text(
+                t("БЕСКОНЕЧНЫЙ"), t("РЕКОРД: ВОЛНА {n}").format(n=best)
+            )
+        else:
+            self.endless_button.set_text(
+                t("БЕСКОНЕЧНЫЙ"), t("БЕЗ КОНЦА ВОЛН")
+            )
+
+        self.achievements_button.set_text(
+            t("ДОСТИЖЕНИЯ"),
+            self._achievements_subtitle(),
+        )
+
+    def _achievements_subtitle(self) -> str:
+        done = unlocked_count(PROGRESS)
+        total = len(ACHIEVEMENTS)
+        fresh = PROGRESS.new_achievement_count()
+        base = t("{done} ИЗ {total}").format(done=done, total=total)
+        if fresh > 0:
+            base += t("  ·  НОВЫХ: {n}").format(n=fresh)
+        return base
 
     def _continue(self, *_args) -> None:
         """Продолжает обучение (в первый раз) или самую дальнюю открытую карту."""
@@ -1482,6 +1721,20 @@ class MenuScreen(Screen):
     def _open_levels(self, *_args) -> None:
         self.screen_manager.current = "levels"
 
+    def _play_endless(self, *_args) -> None:
+        """Быстрый вход в бесконечный режим прямо из меню."""
+        game = self.screen_manager.get_screen("game")
+        game.start_endless()
+        self.screen_manager.current = "game"
+
+    def _play_daily(self, *_args) -> None:
+        """Ежедневная карта: одна попытка в день, как и на экране карт."""
+        if PROGRESS.daily_done():
+            return
+        game = self.screen_manager.get_screen("game")
+        game.start_daily()
+        self.screen_manager.current = "game"
+
     def _open_info(self, *_args) -> None:
         self.info.open()
 
@@ -1491,6 +1744,13 @@ class MenuScreen(Screen):
     def _open_achievements(self, *_args) -> None:
         self.achievements.refresh()
         self.achievements.open()
+        # Отмечаем просмотренными: значок «новое» в меню гаснет.
+        PROGRESS.mark_achievements_seen()
+        self.refresh_menu()
+
+    def _open_records(self, *_args) -> None:
+        self.achievements.close()
+        self.records.open()
 
     def _open_settings(self, *_args) -> None:
         self.settings.refresh()
@@ -2394,6 +2654,9 @@ class GameScreen(Screen):
         self.build_bar = BuildBar(
             on_build=self._select_build,
             on_upgrades=self._open_upgrades,
+            on_confirm=self._confirm_build,
+            on_cycle=self._cycle_build,
+            on_cancel=self._cancel_build,
         )
         self.add_widget(self.build_bar)
 
@@ -2427,6 +2690,25 @@ class GameScreen(Screen):
 
         self._sync = Clock.schedule_interval(self._sync_hud, 0.1)
         Window.bind(on_key_down=self._on_key_down)
+        Window.bind(on_focus=self._on_window_focus)
+        # Не реагируем на стартовые события окна: только на реальную потерю фокуса.
+        self._focus_ready = False
+        Clock.schedule_once(self._enable_focus_watch, 1.5)
+
+    def _enable_focus_watch(self, _dt) -> None:
+        self._focus_ready = True
+
+    def _on_window_focus(self, _window, focused) -> None:
+        if focused or not self._focus_ready:
+            return
+        self.auto_pause()
+
+    def auto_pause(self) -> None:
+        """Пауза при потере фокуса или сворачивании приложения."""
+        if self.manager is None or self.manager.current != "game":
+            return
+        if self.arena.running and not self.arena.paused and not self.arena.ended:
+            self._toggle_pause(None)
 
     # ------------------------------------------------------------------
     def start_level(self, index: int, mode: str = "campaign") -> None:
@@ -2720,12 +3002,34 @@ class GameScreen(Screen):
         self.build_bar.set_state(self.arena.stats(), mode)
         if mode:
             self.toast.show(
-                t("{name}: нажми на свободную площадку").format(
+                t("{name}: выбери площадку и жми «Построить»").format(
                     name=t(BUILD_TYPES[mode]["name"]).upper()
                 ),
                 "blue",
                 1.8,
             )
+
+    def _cycle_build(self, step: int) -> None:
+        """Стрелки ◀ ▶ в режиме стройки: перевести подсветку на другую площадку."""
+        if self.arena.ended or not self.arena.build_mode:
+            return
+        self.arena.cycle_build_focus(step)
+        self._sync_hud()
+
+    def _confirm_build(self) -> None:
+        """Большая кнопка «Построить»: ставит здание на подсвеченную площадку."""
+        if self.arena.ended:
+            return
+        ok, message = self.arena.build_at_focus()
+        if message:
+            self.toast.show(message, "gold" if ok else "bad")
+        self.build_bar.set_state(self.arena.stats(), self.arena.build_mode)
+
+    def _cancel_build(self) -> None:
+        """Крестик ✕: выйти из режима стройки, ничего не потратив."""
+        if self.arena.build_mode:
+            self.arena.set_build_mode(self.arena.build_mode)
+        self.build_bar.set_state(self.arena.stats(), self.arena.build_mode)
 
     def _open_upgrades(self, *_args) -> None:
         if self.arena.ended:
@@ -2814,6 +3118,10 @@ class GameScreen(Screen):
             self._sync = None
         try:
             Window.unbind(on_key_down=self._on_key_down)
+        except Exception:
+            pass
+        try:
+            Window.unbind(on_focus=self._on_window_focus)
         except Exception:
             pass
         self._cancel_hints()

@@ -11,7 +11,7 @@ from ..world.levels import LEVELS
 
 # Версия формата сохранения. При изменении структуры старые файлы
 # дочитываются значениями по умолчанию, а не теряются.
-SAVE_VERSION = 4
+SAVE_VERSION = 5
 
 DEFAULT_COUNTERS = {
     "runs": 0,
@@ -57,6 +57,14 @@ class Progress:
         self.counters = dict(DEFAULT_COUNTERS)
         # Рекорды режимов: бесконечный и ежедневная карта.
         self.endless_best = 0
+        # Рекорды за один бой: золото, убийства и лучшее время победы.
+        self.records: dict = {
+            "run_gold": 0,
+            "run_kills": 0,
+            "fastest_win": 0.0,
+        }
+        # Сколько достижений игрок уже видел — для значка «новое» в меню.
+        self.achievements_seen = 0
         self.daily: dict = {
             "date": "",
             "best": 0,
@@ -111,6 +119,31 @@ class Progress:
             self.endless_best = max(0, int(raw.get("endless_best", 0)))
         except (TypeError, ValueError):
             self.endless_best = 0
+        records = raw.get("records")
+        if isinstance(records, dict):
+            try:
+                run_gold = max(0, int(records.get("run_gold", 0)))
+            except (TypeError, ValueError):
+                run_gold = 0
+            try:
+                run_kills = max(0, int(records.get("run_kills", 0)))
+            except (TypeError, ValueError):
+                run_kills = 0
+            try:
+                fastest = max(0.0, float(records.get("fastest_win", 0.0)))
+            except (TypeError, ValueError):
+                fastest = 0.0
+            self.records = {
+                "run_gold": run_gold,
+                "run_kills": run_kills,
+                "fastest_win": fastest,
+            }
+        try:
+            self.achievements_seen = max(
+                0, int(raw.get("achievements_seen", 0))
+            )
+        except (TypeError, ValueError):
+            self.achievements_seen = 0
         daily = raw.get("daily")
         if isinstance(daily, dict):
             try:
@@ -158,6 +191,8 @@ class Progress:
                 "seen_version": self.seen_version,
                 "counters": dict(self.counters),
                 "endless_best": self.endless_best,
+                "records": dict(self.records),
+                "achievements_seen": self.achievements_seen,
                 "daily": dict(self.daily),
             }
             self.path.write_text(
@@ -282,8 +317,32 @@ class Progress:
         self.save()
         return True
 
+    def seen_achievement_count(self) -> int:
+        return int(self.achievements_seen)
+
+    def new_achievement_count(self) -> int:
+        """Сколько открытых достижений игрок ещё не видел."""
+        try:
+            from .achievements import unlocked_count
+
+            total = unlocked_count(self)
+        except Exception:
+            total = sum(1 for value in self.achievements.values() if value)
+        return max(0, total - self.achievements_seen)
+
+    def mark_achievements_seen(self) -> None:
+        try:
+            from .achievements import unlocked_count
+
+            total = unlocked_count(self)
+        except Exception:
+            total = sum(1 for value in self.achievements.values() if value)
+        if total != self.achievements_seen:
+            self.achievements_seen = total
+            self.save()
+
     def add_run(self, run: dict) -> None:
-        """Учитывает завершённый бой в общих счётчиках."""
+        """Учитывает завершённый бой в общих счётчиках и рекордах."""
         self.counters["runs"] += 1
         if run.get("win"):
             self.counters["wins"] += 1
@@ -292,7 +351,25 @@ class Progress:
         self.counters["gold"] += max(0, int(run.get("gold_earned", 0)))
         self.counters["waves"] += max(0, int(run.get("waves", 0)))
         self.counters["kills"] += max(0, int(run.get("kills", 0)))
+        self._update_records(run)
         self.save()
+
+    def _update_records(self, run: dict) -> None:
+        """Обновляет личные рекорды за один бой."""
+        try:
+            gold = max(0, int(run.get("gold_earned", 0)))
+            kills = max(0, int(run.get("kills", 0)))
+            seconds = max(0.0, float(run.get("time", 0.0)))
+        except (TypeError, ValueError):
+            return
+        if gold > int(self.records.get("run_gold", 0)):
+            self.records["run_gold"] = gold
+        if kills > int(self.records.get("run_kills", 0)):
+            self.records["run_kills"] = kills
+        if run.get("win") and seconds > 0:
+            best = float(self.records.get("fastest_win", 0.0))
+            if best <= 0 or seconds < best:
+                self.records["fastest_win"] = seconds
 
     def record(
         self,
@@ -334,6 +411,8 @@ class Progress:
         self.seen_version = ""
         self.counters = dict(DEFAULT_COUNTERS)
         self.endless_best = 0
+        self.records = {"run_gold": 0, "run_kills": 0, "fastest_win": 0.0}
+        self.achievements_seen = 0
         self.daily = {"date": "", "best": 0, "done": False, "win": False, "streak": 0}
         self.version = SAVE_VERSION
         self.save()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from kivy.graphics import Color, PopMatrix, PushMatrix, Rotate, Translate
+from kivy.graphics import Color, PopMatrix, PushMatrix, Rectangle, Rotate, Translate
 from kivy.metrics import dp
 
 from ..core.config import (
@@ -21,6 +21,7 @@ from ..core.config import (
     GRASS_LIGHT,
     GREEN,
     GREEN_LIGHT,
+    HERO_ATTACK_ANIM,
     RED,
     RED_DARK,
     RED_LIGHT,
@@ -55,6 +56,31 @@ def health_bar(group, x: float, y: float, width: float, ratio: float, color=RED_
     ratio = max(0.0, min(1.0, ratio))
     rect(group, x - width / 2 - 1, y - 1, width + 2, 6, (0.05, 0.06, 0.07, 0.85))
     rect(group, x - width / 2, y, width * ratio, 4, color)
+
+
+# Кэш текстур всплывающих цифр: Label.refresh() — дорогая операция, а цифры
+# встречаются часто. Ключ — текст и размер, цвет задаётся инструкцией Color.
+_TEXT_CACHE: dict[tuple[str, int], object] = {}
+
+
+def _damage_texture(text: str, size: int):
+    """Текстура цифры урона. None, если шрифт недоступен (headless-тесты)."""
+    key = (text, size)
+    cached = _TEXT_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        from kivy.core.text import Label as CoreLabel
+
+        label = CoreLabel(text=text, font_size=size, bold=True)
+        label.refresh()
+        texture = label.texture
+    except Exception:
+        return None
+    if len(_TEXT_CACHE) > 240:
+        _TEXT_CACHE.clear()
+    _TEXT_CACHE[key] = texture
+    return texture
 
 
 def draw_coin(group, coin: Coin, t: float) -> None:
@@ -129,10 +155,24 @@ def draw_hero(group, hero: Hero, t: float) -> None:
     circle(group, x - 16, y + 27 + bob, 7.5, BLUE_LIGHT)
     rect(group, x - 18, y + 22 + bob, 4, 10, GOLD)
 
-    # Меч, повёрнутый в сторону движения.
+    # Меч, повёрнутый в сторону движения. Во время удара меч делает
+    # заметный замах: видно, что герой именно бьёт, а не просто стоит.
+    swing = 0.0
+    lunge = 0.0
+    if hero.attack_anim > 0:
+        progress = 1.0 - max(0.0, hero.attack_anim) / HERO_ATTACK_ANIM
+        # Сначала рука уходит назад (замах), затем резко вперёд (удар).
+        swing = math.sin(progress * math.pi) * 62.0 - 34.0 * progress
+        lunge = math.sin(progress * math.pi) * 11.0
     group.add(PushMatrix())
-    group.add(Translate(x + 10, y + 27 + bob, 0))
-    group.add(Rotate(angle=math.degrees(hero.facing), axis=(0, 0, 1)))
+    group.add(
+        Translate(
+            x + 10 + math.cos(hero.facing) * lunge,
+            y + 27 + bob + math.sin(hero.facing) * lunge,
+            0,
+        )
+    )
+    group.add(Rotate(angle=math.degrees(hero.facing) + swing, axis=(0, 0, 1)))
     rect(group, 0, -2, 25, 4, STONE_LIGHT)
     poly(group, [(24, -3), (33, 0), (24, 3)], WHITE)
     rect(group, -3, -5, 5, 10, GOLD)
@@ -478,19 +518,39 @@ def draw_effect(group, effect: Effect) -> None:
         ring(group, effect.x, effect.y, radius, (*effect.color[:3], alpha * 0.9), 3)
         circle(group, effect.x, effect.y, 8 * (1 - progress), (*effect.color[:3], alpha * 0.6))
     elif effect.kind == "slash":
-        length = 24 + progress * 15
+        scale = 1.5 if effect.strong else 1.0
+        length = (26 + progress * 16) * scale
         angle = effect.angle
-        line(
-            group,
-            [
-                effect.x - math.cos(angle) * length / 2,
-                effect.y - math.sin(angle) * length / 2,
-                effect.x + math.cos(angle) * length / 2,
-                effect.y + math.sin(angle) * length / 2,
-            ],
-            (1, 0.98, 0.82, alpha),
-            2.5,
-        )
+        width = 3.4 if effect.strong else 2.4
+        color = (*effect.color[:3], alpha)
+        # Три коротких штриха веером читаются как взмах меча.
+        for spread in (-0.55, 0.0, 0.55):
+            a = angle + spread
+            line(
+                group,
+                [
+                    effect.x - math.cos(a) * length / 2,
+                    effect.y - math.sin(a) * length / 2,
+                    effect.x + math.cos(a) * length / 2,
+                    effect.y + math.sin(a) * length / 2,
+                ],
+                color,
+                width,
+            )
+    elif effect.kind == "dmg":
+        size = 21 if effect.strong else 16
+        texture = _damage_texture(effect.text, size)
+        if texture is not None:
+            width, height = texture.size
+            rise = progress * 34
+            group.add(Color(*effect.color[:3], max(0.0, min(1.0, (1.0 - progress) * 1.6))))
+            group.add(
+                Rectangle(
+                    texture=texture,
+                    pos=(effect.x - width / 2, effect.y + rise),
+                    size=texture.size,
+                )
+            )
     elif effect.kind == "puff":
         for i in range(6):
             angle = effect.angle + i * math.pi / 3
@@ -553,12 +613,25 @@ def _level_pips(group, x: float, y: float, level: int, max_level: int = 3) -> No
 
 
 def draw_slot(group, x: float, y: float, t: float, active: bool = False,
-              affordable: bool = True) -> None:
-    """Пустая площадка под строительство."""
+              affordable: bool = True, focused: bool = False) -> None:
+    """Пустая площадка под строительство.
+
+    ``focused`` — площадка, которую выбрал игрок: по ней построит кнопка «✓».
+    Её видно издалека: крупное пульсирующее кольцо, стрелка сверху и уголки.
+    """
     pulse = 0.5 + 0.5 * math.sin(t * 3.2 + x * 0.01)
     _shadow(group, x, y, 96, 34, 0.22)
     ellipse(group, x, y + 4, 92, 44, (0.92, 0.86, 0.62, 0.10))
-    if active:
+    if focused:
+        glow = 0.55 + 0.45 * pulse
+        # Широкое «поле» вокруг площадки — палец попадает уверенно.
+        ellipse(group, x, y + 4, 132, 66, (1.0, 0.82, 0.26, 0.10 + glow * 0.10))
+        ring(group, x, y + 4, 58 + pulse * 8, (1.0, 0.80, 0.22, 0.90), 4.0)
+        ring(group, x, y + 4, 45 + pulse * 4, (1.0, 0.90, 0.42, 0.55), 2.5)
+        ring(group, x, y + 4, 30, (1.0, 0.94, 0.55, 0.35), 1.5)
+        _focus_corners(group, x, y + 4, 40 + pulse * 6, (1.0, 0.88, 0.38, 0.95))
+        _focus_arrow(group, x, y + 52 + pulse * 6, (1.0, 0.86, 0.30, 0.95))
+    elif active:
         ring(group, x, y + 4, 40 + pulse * 5, (1.0, 0.86, 0.32, 0.85), 2.5)
         ring(group, x, y + 4, 30, (1.0, 0.90, 0.45, 0.35), 1.5)
         ellipse(group, x, y + 4, 76, 34, (1.0, 0.84, 0.30, 0.10 + pulse * 0.10))
@@ -567,11 +640,32 @@ def draw_slot(group, x: float, y: float, t: float, active: bool = False,
         ring(group, x, y + 4, 30, (1.0, 0.95, 0.72, 0.10), 1.0)
 
     color = (1.0, 0.86, 0.34, 0.92) if affordable else (0.72, 0.72, 0.68, 0.55)
+    if focused:
+        color = (1.0, 0.94, 0.62, 1.0)
     rect(group, x - 9, y + 10, 18, 4, color)
     rect(group, x - 2, y + 3, 4, 18, color)
 
     for dx, dy in ((-28, 12), (28, 12), (-28, -4), (28, -4)):
         circle(group, x + dx, y + dy, 2.2, (1.0, 0.95, 0.75, 0.35))
+
+
+def _focus_corners(group, cx: float, cy: float, r: float, color) -> None:
+    """Четыре «уголка» — рамка-прицел вокруг выбранной площадки."""
+    arm = 10.0
+    for sx, sy in ((-1, 1), (1, 1), (-1, -1), (1, -1)):
+        ox, oy = cx + sx * r, cy + sy * r
+        line(group, [ox - sx * arm, oy, ox, oy, ox, oy - sy * arm], color, 3.0)
+
+
+def _focus_arrow(group, cx: float, cy: float, color) -> None:
+    """Стрелка, указывающая на выбранную площадку сверху."""
+    line(
+        group,
+        [cx, cy + 6, cx - 11, cy + 20, cx - 4, cy + 20,
+         cx - 4, cy + 30, cx + 4, cy + 30, cx + 4, cy + 20,
+         cx + 11, cy + 20, cx, cy + 6],
+        color, 2.0,
+    )
 
 
 def draw_building(group, building: Building, t: float) -> None:

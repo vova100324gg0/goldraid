@@ -82,6 +82,32 @@ class GoldRaidApp(App):
         except Exception:
             pass
 
+    def _auto_pause_game(self) -> None:
+        """Ставит бой на паузу, когда приложение уходит в фон."""
+        manager = self.root
+        if manager is None:
+            return
+        for screen in manager.screens:
+            pause = getattr(screen, "auto_pause", None)
+            if callable(pause):
+                try:
+                    pause()
+                except Exception:
+                    pass
+
+    def on_pause(self) -> bool:
+        # Android сворачивает приложение: бой должен встать на паузу,
+        # иначе за время звонка база падёт сама по себе.
+        self._auto_pause_game()
+        return True
+
+    def on_resume(self) -> None:
+        # Возвращаемся в игру без «прыжка» времени вперёд.
+        self._auto_pause_game()
+
+    def on_stop(self) -> None:
+        self._auto_pause_game()
+
 
 if __name__ == "__main__":
     GoldRaidApp().run()

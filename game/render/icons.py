@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 
-from .gfx import circle, ellipse, line, poly, rect, ring, rounds
+from .gfx import circle, ellipse, line, poly, rect, ring, rounds, star
 
 
 def _arc(group, cx, cy, r, a0, a1, color, width=1.4, steps=10) -> None:
@@ -85,6 +85,24 @@ def draw_icon(group, kind: str, cx: float, cy: float, size: float, color) -> Non
         poly(group, [(cx, cy + s * 0.9), (cx + s * 0.8, cy), (cx + s * 0.3, cy),
                      (cx + s * 0.3, cy - s * 0.2), (cx - s * 0.3, cy - s * 0.2),
                      (cx - s * 0.3, cy), (cx - s * 0.8, cy)], color)
+    elif kind == "arrow_left":
+        poly(group, [(cx - s * 0.7, cy), (cx + s * 0.5, cy + s * 0.82),
+                     (cx + s * 0.5, cy - s * 0.82)], color)
+        rect(group, cx + s * 0.32, cy - s * 0.2, s * 0.5, s * 0.4, shade)
+    elif kind == "arrow_right":
+        poly(group, [(cx + s * 0.7, cy), (cx - s * 0.5, cy + s * 0.82),
+                     (cx - s * 0.5, cy - s * 0.82)], color)
+        rect(group, cx - s * 0.82, cy - s * 0.2, s * 0.5, s * 0.4, shade)
+    elif kind == "check":
+        line(group, [cx - s * 0.75, cy + s * 0.05, cx - s * 0.15, cy - s * 0.62,
+                     cx + s * 0.8, cy + s * 0.7], color, 3.4)
+    elif kind == "close":
+        line(group, [cx - s * 0.6, cy - s * 0.6, cx + s * 0.6, cy + s * 0.6],
+             color, 3.0)
+        line(group, [cx - s * 0.6, cy + s * 0.6, cx + s * 0.6, cy - s * 0.6],
+             color, 3.0)
+    elif kind == "star":
+        star(group, cx, cy, s * 0.98, color, inner=s * 0.44)
     elif kind in ("sound", "mute"):
         # Корпус динамика: прямоугольник + раструб.
         rect(group, cx - s * 0.86, cy - s * 0.34, s * 0.42, s * 0.68, color)

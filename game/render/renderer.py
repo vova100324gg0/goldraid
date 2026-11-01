@@ -19,7 +19,8 @@ import math
 from kivy.graphics import PopMatrix, PushMatrix, Scale, Translate
 from kivy.metrics import dp
 
-from .gfx import ring
+from ..core.config import HERO_ATTACK_RANGE
+from .gfx import line, ring
 from .sprites import (
     draw_coin,
     draw_defender,
@@ -92,6 +93,39 @@ def draw_arena(arena) -> None:
                 (1.0, 0.48, 0.20, 0.45 + pulse * 0.25),
                 2,
             )
+
+    # Понятная боёвка: показываем радиус удара героя и метку его цели.
+    target = getattr(arena, "hero_target", None)
+    if arena.hero.hp > 0 and target is not None and target in arena.enemies:
+        swing = 1.0 if arena.hero.attack_anim > 0 else 0.0
+        ring(
+            group,
+            arena.hero.x,
+            arena.hero.y + 4,
+            HERO_ATTACK_RANGE,
+            (1.0, 0.86, 0.40, 0.12 + swing * 0.14),
+            1.5,
+        )
+        pulse = 0.5 + 0.5 * math.sin(arena.elapsed * 7)
+        ring(
+            group,
+            target.x,
+            target.y + target.radius * 0.4,
+            target.radius + 12 + pulse * 4 + swing * 4,
+            (1.0, 0.34, 0.28, 0.85),
+            2.5,
+        )
+        tip_y = target.y + target.radius * 2.2 + dp(18)
+        line(
+            group,
+            [
+                target.x - 9, tip_y + 11,
+                target.x, tip_y,
+                target.x + 9, tip_y + 11,
+            ],
+            (1.0, 0.44, 0.34, 0.95),
+            3.0,
+        )
 
     for effect in arena.effects:
         if visible(effect.x, effect.y):

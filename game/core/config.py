@@ -53,7 +53,7 @@ AUTHOR = "elsty"
 GAME_TITLE = "ЗОЛОТОЙ РЕЙД"
 DISCORD_URL = "https://discord.com/users/579542324686618669"
 DISCORD_HANDLE = "discord.com/users/579542324686618669"
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 UI_DEEP = (0.012, 0.040, 0.030, 1)
 UI_DEEP_2 = (0.024, 0.076, 0.055, 1)
@@ -180,6 +180,13 @@ HERO_ATTACK_RANGE = 84.0
 HERO_ATTACK_COOLDOWN = 0.45
 HERO_ATTACK_DAMAGE = 18.0
 HERO_REGEN = 0.9
+# Замах меча: пока таймер идёт, герой «бьёт» — рука с мечом уходит вперёд.
+HERO_ATTACK_ANIM = 0.26
+# Столкновения героя: радиус самого героя и препятствий на земле.
+# Благодаря им герой упирается в постройки и замок, а не проходит сквозь.
+HERO_RADIUS = 19.0
+BUILDING_BLOCK_RADIUS = 42.0
+BASE_BLOCK_RADIUS = 64.0
 
 # ---------------------------------------------------------------------------
 # Постройки

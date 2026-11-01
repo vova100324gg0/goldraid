@@ -178,6 +178,13 @@ EN: dict[str, str] = {
     "{name}: выбери свободную площадку · нажми кнопку ещё раз, чтобы отменить": (
         "{name}: pick a free slot · tap the button again to cancel"
     ),
+    "ПОСТРОИТЬ": "BUILD",
+    "выбери площадку и жми «Построить»": "pick a slot and tap Build",
+    "{name}: выбери площадку и жми «Построить»": (
+        "{name}: pick a slot and tap Build"
+    ),
+    "Свободных площадок нет": "No free slots left",
+    "Сначала выбери постройку": "Pick a building first",
     "ВОЛНА {wave} ЧЕРЕЗ {left} С": "WAVE {wave} IN {left} S",
     "{caption}\nВЫЗВАТЬ РАНЬШЕ · +{bonus} З.": (
         "{caption}\nCALL EARLY · +{bonus} G."
@@ -186,6 +193,15 @@ EN: dict[str, str] = {
     "ОБОРОНА · ВОЛНЫ · ЗОЛОТО": "DEFENSE · WAVES · GOLD",
     "ИГРАТЬ · ВЫБОР КАРТЫ": "PLAY · MAP SELECT",
     "ОБ АВТОРЕ": "ABOUT",
+    "КАМПАНИЯ": "CAMPAIGN",
+    "ЕЖЕДНЕВНАЯ": "DAILY",
+    "БЕСКОНЕЧНЫЙ": "ENDLESS",
+    "{n} КАРТ": "{n} MAPS",
+    "НОВАЯ КАРТА ДНЯ": "NEW MAP TODAY",
+    "ПРОЙДЕНА · ВОЛНА {n}": "DONE · WAVE {n}",
+    "РЕКОРД: ВОЛНА {n}": "BEST: WAVE {n}",
+    "БЕЗ КОНЦА ВОЛН": "WAVES NEVER STOP",
+    "{done} ИЗ {total}": "{done} OF {total}",
     "СНАЧАЛА — КОРОТКОЕ ОБУЧЕНИЕ · 3 ВОЛНЫ": (
         "FIRST — A SHORT TUTORIAL · 3 WAVES"
     ),
@@ -469,6 +485,50 @@ EN: dict[str, str] = {
     ),
     "• Новый шрифт кнопок и обновлённое меню": (
         "• A new button font and a refreshed menu"
+    ),
+    # --- рекорды и достижения 1.6.0 --------------------------------------
+    "РЕКОРДЫ": "RECORDS",
+    "Лучшая волна (бесконечный): {n}": "Best wave (endless): {n}",
+    "Золото за один бой: {n}": "Gold in one run: {n}",
+    "Убийств за один бой: {n}": "Kills in one run: {n}",
+    "Самая быстрая победа: {v}": "Fastest victory: {v}",
+    "Всего золота: {n}": "Total gold: {n}",
+    "Всего убийств: {n}": "Total kills: {n}",
+    "Отбито волн: {n}": "Waves repelled: {n}",
+    "Карт пройдено: {done} из {total}": "Maps cleared: {done} of {total}",
+    "Звёзд собрано: {n}": "Stars earned: {n}",
+    "  ·  НОВЫХ: {n}": "  ·  NEW: {n}",
+    "Золотой поток": "Golden Flow",
+    "Заработай 800 золота за один бой": "Earn 800 gold in a single run",
+    "Постоянство": "Consistency",
+    "Открывай ежедневную карту 3 дня подряд": "Play the daily map 3 days in a row",
+    "Молниеносный": "Lightning Fast",
+    "Пройди любую карту быстрее 4 минут": "Clear any map in under 4 minutes",
+    # --- боевые удобства 1.6.0 -------------------------------------------
+    "Герой бьёт ближайшего врага сам — подведи его ближе": (
+        "The hero strikes the nearest enemy — just get him close"
+    ),
+    "Бой на паузе, пока окно не в фокусе": (
+        "The battle pauses while the window is unfocused"
+    ),
+    # --- что нового 1.6.0 ------------------------------------------------
+    "• Обновлённое меню-витрина с крупными карточками режимов": (
+        "• A refreshed showcase menu with large mode cards"
+    ),
+    "• Понятная боёвка героя: замах меча, метка цели и цифры урона": (
+        "• Clearer hero combat: sword swings, target marker and damage numbers"
+    ),
+    "• Герой больше не проходит сквозь постройки и замок": (
+        "• The hero no longer walks through buildings and the castle"
+    ),
+    "• Кнопка «Ещё раз» после боя и автопауза при сворачивании": (
+        "• A Play Again button after battle and auto-pause when minimized"
+    ),
+    "• Экран рекордов: волны, золото, убийства и время": (
+        "• Records screen: waves, gold, kills and time"
+    ),
+    "• Три новых достижения и значок «новое» в меню": (
+        "• Three new achievements and a New badge in the menu"
     ),
 }
 

@@ -186,6 +186,149 @@ class GameButton(Button):
         self._refresh_style()
 
 
+class _ModeIcon(Widget):
+    """Маленький виджет-иконка: рисует себя в собственном canvas.
+
+    Именно дочерний виджет, а не инструкции в ``canvas.after``: так иконка
+    гарантированно попадает в первый же кадр, даже если карточка создана
+    ещё до подключения окна.
+    """
+
+    def __init__(self, icon: str, color, **kwargs):
+        kwargs.setdefault("size_hint", (None, None))
+        super().__init__(**kwargs)
+        self._icon = icon
+        self._color = list(color)
+        self._group = InstructionGroup()
+        self.canvas.add(self._group)
+        self.bind(pos=self._redraw, size=self._redraw)
+        self._redraw()
+
+    def set_color(self, color) -> None:
+        self._color = list(color)
+        self._redraw()
+
+    def _redraw(self, *_args) -> None:
+        self._group.clear()
+        if not self._icon or self.width <= 1 or self.height <= 1:
+            return
+        draw_icon(
+            self._group,
+            self._icon,
+            self.x + self.width * 0.5,
+            self.y + self.height * 0.5,
+            min(self.width, self.height),
+            self._color,
+        )
+
+
+class ModeCard(GameButton):
+    """Крупная карточка режима: иконка сверху, заголовок и подпись по центру.
+
+    Обычная кнопка рисует одну строку одним размером, поэтому длинные
+    подписи вроде «БЕСКОНЕЧНЫЙ / рекорд: волна 24» съезжали и выглядели
+    неопрятно. Здесь заголовок и подпись — два отдельных Label с разными
+    размерами и цветом: строки всегда стоят ровно друг под другом.
+    """
+
+    def __init__(
+        self,
+        title: str,
+        subtitle: str = "",
+        icon: str | None = None,
+        color=(0.20, 0.34, 0.30, 1),
+        text_color=(0.96, 1.0, 0.97, 1),
+        sub_color=(0.70, 0.86, 0.78, 1),
+        **kwargs,
+    ):
+        kwargs.setdefault("height", dp(106))
+        kwargs.setdefault("radius", 16)
+        super().__init__(
+            text=title,
+            color=color,
+            # Сам Button подпись не рисует: её заменяют две аккуратные строки.
+            text_color=(0, 0, 0, 0),
+            **kwargs,
+        )
+        self._title_color = list(text_color)
+        self._sub_color = list(sub_color)
+        self._icon = icon
+        self._icon_color = list(text_color)
+
+        self._title_label = Label(
+            text=title,
+            font_name=DISPLAY_FONT,
+            bold=True,
+            font_size=sp(13.5),
+            color=self._title_color,
+            halign="center",
+            valign="middle",
+        )
+        self._subtitle_label = Label(
+            text=subtitle,
+            font_size=sp(9.5),
+            color=self._sub_color,
+            halign="center",
+            valign="middle",
+        )
+        for label in (self._title_label, self._subtitle_label):
+            label.size_hint = (None, None)
+            self.add_widget(label)
+
+        self._icon_widget = _ModeIcon(icon, self._icon_color)
+        self.add_widget(self._icon_widget)
+
+        self.bind(pos=self._layout_content, size=self._layout_content)
+        self._layout_content()
+
+    # ------------------------------------------------------------------
+    def _layout_content(self, *_args) -> None:
+        if not hasattr(self, "_title_label"):
+            return
+        pad = dp(8)
+        width = max(1.0, self.width - pad * 2)
+        title_h = dp(22)
+        sub_h = dp(17)
+        # Иконка сверху, ниже — ровный блок из двух строк.
+        self._title_label.size = (width, title_h)
+        self._title_label.pos = (
+            self.x + pad,
+            self.y + (dp(38) if self._subtitle_label.text else dp(26)),
+        )
+        self._title_label.text_size = self._title_label.size
+        self._subtitle_label.size = (width, sub_h)
+        self._subtitle_label.pos = (self.x + pad, self.y + dp(17))
+        self._subtitle_label.text_size = self._subtitle_label.size
+
+        icon_size = min(self.width * 0.30, dp(26))
+        self._icon_widget.size = (icon_size, icon_size)
+        self._icon_widget.pos = (
+            self.x + self.width * 0.5 - icon_size * 0.5,
+            self.y + self.height - dp(30) - icon_size * 0.5,
+        )
+
+    def _refresh_style(self, *_args) -> None:
+        super()._refresh_style(*_args)
+        if not hasattr(self, "_title_label"):
+            return
+        if self.disabled:
+            self._title_label.color = (*self._title_color[:3], 0.55)
+            self._subtitle_label.color = (*self._sub_color[:3], 0.45)
+            self._icon_widget.set_color((*self._icon_color[:3], 0.55))
+        else:
+            self._title_label.color = self._title_color
+            self._subtitle_label.color = self._sub_color
+            self._icon_widget.set_color(self._icon_color)
+
+    def set_text(self, title: str, subtitle: str | None = None) -> None:
+        """Меняет подписи, не пересоздавая карточку."""
+        self.text = title
+        self._title_label.text = title
+        if subtitle is not None:
+            self._subtitle_label.text = subtitle
+        self._layout_content()
+
+
 class RibbonLabel(Label):
     """Подпись на золотой «ленточке»: тёмная плашка со скруглением."""
 
@@ -707,13 +850,47 @@ class BuildCard(GameButton):
         )
 
 
+class _GlyphButton(GameButton):
+    """Квадратная кнопка с нарисованной иконкой вместо текста.
+
+    Нужна там, где Unicode-глиф (стрелка, крестик) может не найтись в шрифте
+    телефона — рисуем значок сами, как в HUD.
+    """
+
+    def __init__(self, icon: str, color=(0.16, 0.30, 0.22, 1),
+                 icon_color=(1, 1, 1, 1), icon_scale: float = 0.42, **kwargs):
+        super().__init__(text="", color=color, text_color=icon_color,
+                         radius=14, **kwargs)
+        self._icon = icon
+        self._icon_scale = icon_scale
+        self._icon_color = list(icon_color)
+        self._glyph = InstructionGroup()
+        self.canvas.after.add(self._glyph)
+        self.bind(pos=self._draw_glyph, size=self._draw_glyph)
+
+    def _draw_glyph(self, *_args) -> None:
+        self._glyph.clear()
+        if self.width <= 1:
+            return
+        color = self._icon_color if not self.disabled else [1, 1, 1, 0.55]
+        draw_icon(
+            self._glyph, self._icon, self.center_x, self.center_y,
+            min(self.width, self.height) * self._icon_scale, color,
+        )
+
+
 class BuildBar(FloatLayout):
     """Нижняя панель строительства и улучшений."""
 
-    def __init__(self, on_build=None, on_upgrades=None, **kwargs):
+    def __init__(self, on_build=None, on_upgrades=None, on_confirm=None,
+                 on_cycle=None, on_cancel=None, **kwargs):
         super().__init__(size_hint=(1, 1), **kwargs)
         self.on_build = on_build or (lambda *args: None)
         self.on_upgrades = on_upgrades or (lambda *args: None)
+        self.on_confirm = on_confirm or (lambda *args: None)
+        self.on_cycle = on_cycle or (lambda *args: None)
+        self.on_cancel = on_cancel or (lambda *args: None)
+        self._mode = None
 
         panel = BoxLayout(
             orientation="vertical",
@@ -747,12 +924,18 @@ class BuildBar(FloatLayout):
         self.hint.bind(size=lambda w, _v: setattr(w, "text_size", w.size))
         panel.add_widget(self.hint)
 
-        row = BoxLayout(
+        # Ряд кнопок меняется местами: обычные карточки построек или крупные
+        # кнопки режима стройки. Оба ряда живут в контейнере одной высоты,
+        # поэтому панель не «прыгает».
+        self.row_host = BoxLayout(
             orientation="horizontal",
             size_hint_y=None,
             height=dp(76),
-            spacing=dp(5),
         )
+        panel.add_widget(self.row_host)
+
+        # --- обычный ряд: карточки построек + улучшения ---------------
+        self.normal_row = BoxLayout(orientation="horizontal", spacing=dp(5))
         icons = {"mine": "mine", "tower": "tower", "barracks": "barracks", "totem": "totem"}
         self.buttons = {}
         for kind, data in BUILD_TYPES.items():
@@ -766,7 +949,7 @@ class BuildBar(FloatLayout):
                 font_size=sp(10),
             )
             button.bind(on_release=lambda _inst, k=kind: self.on_build(k))
-            row.add_widget(button)
+            self.normal_row.add_widget(button)
             self.buttons[kind] = button
 
         self.upgrade_button = GameButton(
@@ -785,10 +968,56 @@ class BuildBar(FloatLayout):
             pos=lambda w, _v: self._draw_upgrade_glyph(w),
             size=lambda w, _v: self._draw_upgrade_glyph(w),
         )
-        row.add_widget(self.upgrade_button)
-        panel.add_widget(row)
+        self.normal_row.add_widget(self.upgrade_button)
+
+        # --- ряд режима стройки: ◀ / Построить / ▶ / ✕ ---------------
+        # Крупная кнопка подтверждения избавляет от необходимости целиться
+        # пальцем: площадку выбираем стрелками, строим одной кнопкой.
+        self.mode_row = BoxLayout(orientation="horizontal", spacing=dp(5))
+        self.prev_button = _GlyphButton(
+            "arrow_left",
+            color=(0.16, 0.34, 0.24, 1),
+            height=dp(76),
+            size_hint_x=None,
+            width=dp(54),
+        )
+        self.prev_button.bind(on_release=lambda *_a: self.on_cycle(-1))
+        self.mode_row.add_widget(self.prev_button)
+
+        self.confirm_button = GameButton(
+            text=t("ПОСТРОИТЬ"),
+            color=(0.14, 0.50, 0.29, 1),
+            text_color=(1.0, 0.98, 0.90, 1),
+            height=dp(76),
+            radius=14,
+            font_size=sp(14),
+        )
+        self.confirm_button.bind(on_release=lambda *_a: self.on_confirm())
+        self.mode_row.add_widget(self.confirm_button)
+
+        self.next_button = _GlyphButton(
+            "arrow_right",
+            color=(0.16, 0.34, 0.24, 1),
+            height=dp(76),
+            size_hint_x=None,
+            width=dp(54),
+        )
+        self.next_button.bind(on_release=lambda *_a: self.on_cycle(1))
+        self.mode_row.add_widget(self.next_button)
+
+        self.cancel_button = _GlyphButton(
+            "close",
+            color=(0.40, 0.15, 0.15, 1),
+            height=dp(76),
+            size_hint_x=None,
+            width=dp(54),
+        )
+        self.cancel_button.bind(on_release=lambda *_a: self.on_cancel())
+        self.mode_row.add_widget(self.cancel_button)
 
         self.add_widget(panel)
+        self._row_mode = None
+        self._set_row(False)
 
     def _sync_panel(self, *_args) -> None:
         pad = dp(1.5)
@@ -811,6 +1040,14 @@ class BuildBar(FloatLayout):
             min(button.width * 0.5, dp(24)), list(button.text_color),
         )
 
+    def _set_row(self, mode_row: bool) -> None:
+        """Показывает либо обычные карточки, либо ряд режима стройки."""
+        if self._row_mode == mode_row:
+            return
+        self._row_mode = mode_row
+        self.row_host.clear_widgets()
+        self.row_host.add_widget(self.mode_row if mode_row else self.normal_row)
+
     def set_state(self, stats: dict, mode: str | None) -> None:
         gold = int(stats.get("gold", 0))
         for kind, button in self.buttons.items():
@@ -818,16 +1055,27 @@ class BuildBar(FloatLayout):
             active = mode == kind
             button.set_active(active)
             button.disabled = (not active) and gold < cost
+
         if mode is None:
             _set_text(self.hint, t("Строй и защищай базу"))
-        else:
-            _set_text(
-                self.hint,
-                t(
-                    "{name}: выбери свободную площадку · "
-                    "нажми кнопку ещё раз, чтобы отменить"
-                ).format(name=t(BUILD_TYPES[mode]["name"])),
-            )
+            self._set_row(False)
+            return
+
+        data = BUILD_TYPES[mode]
+        cost = int(data["cost"])
+        self.confirm_button.disabled = gold < cost
+        _set_text(
+            self.confirm_button,
+            t("ПОСТРОИТЬ") + "\n" + t("{cost} з.").format(cost=cost),
+        )
+        _set_text(
+            self.hint,
+            "{name}: {pick}".format(
+                name=t(data["name"]),
+                pick=t("выбери площадку и жми «Построить»"),
+            ),
+        )
+        self._set_row(True)
 
 
 class Toast(FloatLayout):

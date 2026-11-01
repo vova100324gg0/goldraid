@@ -19,6 +19,7 @@ class Hero:
     facing: float = 0.0
     invuln: float = 0.0
     attack_cd: float = 0.0
+    attack_anim: float = 0.0
     bob: float = 0.0
     moving: bool = False
     carried: int = 0
@@ -111,6 +112,9 @@ class Effect:
     color: tuple = GOLD
     x2: float = 0.0
     y2: float = 0.0
+    # Всплывающая цифра урона: текст и «важность» (обычный/критический).
+    text: str = ""
+    strong: bool = False
 
 
 @dataclass
