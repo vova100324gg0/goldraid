@@ -53,7 +53,7 @@ AUTHOR = "elsty"
 GAME_TITLE = "ЗОЛОТОЙ РЕЙД"
 DISCORD_URL = "https://discord.com/users/579542324686618669"
 DISCORD_HANDLE = "discord.com/users/579542324686618669"
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 
 UI_DEEP = (0.012, 0.040, 0.030, 1)
 UI_DEEP_2 = (0.024, 0.076, 0.055, 1)

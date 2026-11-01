@@ -759,6 +759,31 @@ EN: dict[str, str] = {
     "• Исправлен номер карты в медальоне": (
         "• Fixed the map number inside the medallion"
     ),
+    # --- что нового 1.9.0 ------------------------------------------------
+    "• Бой при больших ордах стал заметно быстрее": (
+        "• Battle with large hordes is noticeably faster"
+    ),
+    "• Сюжет вырос: новые реплики в брифингах, эпилогах и развязке": (
+        "• More story: new lines in briefings, epilogues and the finale"
+    ),
+    "• Починен доход золота — раньше он рос вдвое быстрее задуманного": (
+        "• Gold income fixed — it used to grow twice as fast as intended"
+    ),
+    "• Богатые жилы больше не мешают появляться обычным кучкам золота": (
+        "• Rich veins no longer stop normal gold piles from appearing"
+    ),
+    "• Обучение не засчитывается как настоящая победа и не пишет рекорды": (
+        "• The tutorial no longer counts as a real win and writes no records"
+    ),
+    "• Серия ежедневной карты считает подряд сыгранные дни": (
+        "• The daily streak now counts consecutive days played"
+    ),
+    "• Кнопка вызова волны не налезает на панель стройки на телефоне": (
+        "• The wave-call button no longer overlaps the build bar on phones"
+    ),
+    "• Горячие клавиши не срабатывают под открытыми окнами боя": (
+        "• Hotkeys no longer fire while battle windows are open"
+    ),
     # --- что нового 1.8.0 ------------------------------------------------
     "• Постройки качаются до 5 уровня — поздние волны больше не стена": (
         "• Buildings upgrade to level 5 — late waves are no longer a wall"
